@@ -66,7 +66,7 @@ doc.completed.push({session_id:'c'});assert.equal(context.nextSession(doc),null)
 doc.completed=[];
 let snapshots=0, loaded=[];
 const logContext=vm.createContext({
- draft:null, api:async()=>structuredClone(doc), uid:()=>String(++counter),
+ unit:'kg', draft:null, api:async()=>structuredClone(doc), uid:()=>String(++counter),
  refFromServer:()=>({basis:'tm',ls:true}),saveDraft:()=>snapshots++,say(){},renderWorkout(){},
  loadState:ex=>loaded.push(ex.template_id),confirm:()=>false,
  document:{querySelector:()=>null},
@@ -101,10 +101,11 @@ vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  
  await assert.rejects(logContext.loadPlannedWorkout('plan-1','b'),/needs movements/);
  sets[0].done=true;sets[0].kg='120';
  const payload=logContext.buildEntry();
- assert.equal(payload.planned_session.session_id,'a');assert.equal(payload.exercises[0].sets.length,1);
+ assert.equal(payload.weight_unit,'kg');assert.equal(payload.planned_session.session_id,'a');assert.equal(payload.exercises[0].sets.length,1);
  assert.equal(payload.exercises[0].sets[0].ts,true);
  const convertedPounds=132.34/2.20462262185;sets[0].kg=String(convertedPounds);
  assert.equal(logContext.buildEntry().exercises[0].sets[0].weight_kg,convertedPounds,'Saving must not round converted weights');
+ logContext.unit='lb';assert.equal(logContext.buildEntry().weight_unit,'lb','Upload must carry the currently selected unit');
  doc.completed=[{session_id:'a'}];logContext.draft=null;
  await assert.rejects(logContext.loadPlannedWorkout('plan-1','a'),/already completed/);
  doc.completed=[];doc.name='BS-Bridge1.2';doc.weeks[0].sessions[0].name='BS-Bridge1.2.1';

@@ -15,7 +15,7 @@ One user (Brian), one Hevy account. The app has no login; it is meant to sit on 
 
 ### How it is used
 
-Saving preserves the logged kg value without additional rounding in the frontend or Hevy payload builder, including precision from pound entries. Movement increments still round automatically planned weights; they do not round uploads.
+The log sends original kg values plus its current `weight_unit` (kg/lb). Only the Hevy payload rounds to the nearest whole number in that selected unit, with .5 rounding up. In lb mode it rounds pounds first, then converts back to kg for Hevy without further rounding. Exact local set records and TS calculations retain original values. Older API clients omitting weight_unit retain their existing unrounded behavior. Movement planning still uses the configured increments.
 
 On desktop (a mouse/fine pointer), the log's RPE field accepts direct numeric entry, with an adjacent arrow for the existing popup picker. Touch devices retain the full-size picker button. Both use RPE 4–10 in steps of 0.5, or blank for unrated. Invalid typed input blocks ticking and saving until corrected; Enter finishes editing and Escape returns to the last accepted value. This changes only entry: unticked RPE plans the weight, and completed-set RPE records the actual effort without changing its weight. Run `node tests/test_log_rpe_entry.cjs` for the standalone frontend regression checks.
 

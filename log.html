@@ -1695,7 +1695,7 @@
       if (sets.length) exercises.push({ exercise_template_id: ex.template_id, title: ex.title, notes: ex.notes, sets });
     }
     if (!exercises.length) throw new Error("Tap ✓ on each set you did before saving.");
-    return { title: draft.title.trim() || "Workout", start_time: draft.startedAt, end_time: new Date().toISOString(), exercises,
+    return { title: draft.title.trim() || "Workout", weight_unit: unit, start_time: draft.startedAt, end_time: new Date().toISOString(), exercises,
       ...(draft.planned_session ? { planned_session: draft.planned_session } : {}) };
   }
 

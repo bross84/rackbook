@@ -177,6 +177,19 @@ class TestCreateHevyWorkout(WorkoutsRouteCase):
         (body,), _ = self.hevy.create_workout.call_args
         self.assertIsNone(body["workout"]["exercises"][0]["sets"][2]["rpe"])
 
+    def test_rounds_upload_in_pounds_and_preserves_exact_local_weights(self):
+        factor=2.20462262185
+        weights=[132.34/factor,132.51/factor]
+        response=self._post(weight_unit='lb',exercises=[{'exercise_template_id':'t','sets':[{'weight_kg':kg,'reps':5} for kg in weights]}])
+        self.assertEqual(200,response.status_code,response.text)
+        body=self.hevy.create_workout.call_args.args[0]
+        sent=body['workout']['exercises'][0]['sets']
+        self.assertAlmostEqual(132,sent[0]['weight_kg']*factor)
+        self.assertAlmostEqual(133,sent[1]['weight_kg']*factor)
+        with main.get_db() as conn:
+            stored=conn.execute('SELECT weight_kg FROM logged_sets ORDER BY set_number').fetchall()
+        self.assertEqual(weights,[row['weight_kg'] for row in stored])
+
     def test_unstorable_rpe_adds_no_note(self):
         self._post()
         (body,), _ = self.hevy.create_workout.call_args

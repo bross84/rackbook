@@ -5,15 +5,18 @@ No DB access, no HTTP calls, no side effects.
 Hevy's rules (docs/hevy-api.md): snake_case keys wrapped in {"workout": {...}}; set type is one of
 warmup / normal / failure / dropset; rpe is one of 6, 7, 7.5, 8, 8.5, 9, 9.5, 10 or null.
 An RPE Hevy cannot store (below 6, or 6.5) is simply left blank.
-Weights are entered and posted in kg, as typed (the page shows lb only as a reference).
+Weights arrive in kg. When weight_unit is supplied, round to whole units in that
+display unit before posting kg to Hevy. Local records retain the entered weights.
 """
 from __future__ import annotations
 
 from datetime import datetime
+from math import floor, inf, nextafter
 from typing import Any
 
 SET_TYPES = ("warmup", "normal", "failure", "dropset")
 HEVY_RPE_VALUES = (6.0, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0)
+LB_PER_KG = 2.20462262185
 
 
 def _parse_time(value: str) -> datetime:
@@ -25,10 +28,13 @@ def _parse_time(value: str) -> datetime:
 
 def build_hevy_workout(entry: dict[str, Any]) -> dict[str, Any]:
     """
-    Convert a logged workout (weights in kg) into Hevy's request body without rounding.
+    Convert kg inputs into Hevy's request body, rounding in the requested display unit.
     Raises ValueError if the workout can't be sent.
     """
     title = (entry.get("title") or "").strip()
+    weight_unit = entry.get('weight_unit')
+    if weight_unit not in (None, 'kg', 'lb'):
+        raise ValueError('Weight unit must be kg or lb.')
     if not title:
         raise ValueError("Workout needs a title.")
 
@@ -53,6 +59,13 @@ def build_hevy_workout(entry: dict[str, Any]) -> dict[str, Any]:
             weight_kg = raw_set.get("weight_kg")
             if weight_kg is not None and weight_kg < 0:
                 raise ValueError(f"{name} set {number}: weight can't be negative.")
+            if weight_kg is not None and weight_unit is not None:
+                factor = LB_PER_KG if weight_unit == 'lb' else 1
+                amount = float(weight_kg) * factor
+                # A kg -> lb round trip can land one float below an exact .5.
+                if weight_unit == 'lb':
+                    amount = nextafter(amount, inf)
+                weight_kg = floor(amount + 0.5) / factor
             reps = raw_set.get("reps")
             if reps is not None and reps < 0:
                 raise ValueError(f"{name} set {number}: reps can't be negative.")

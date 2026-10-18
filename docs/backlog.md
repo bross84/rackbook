@@ -29,6 +29,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Whole-unit Hevy weights (2026-10-18): the log sends its selected kg/lb unit with the original set weights. The Hevy payload rounds to whole numbers in that unit, with .5 rounding up; lb values are rounded before conversion back to Hevy's kg format. Exact local sets and loading calculations retain their original weights.
+
 - Preserve uploaded weights (2026-10-18): removed two-decimal kg rounding from both the log's save payload and the Hevy payload builder. Pound entries retain their conversion precision on upload; planning still uses the selected movement increment.
 
 - Undo prior completion (2026-10-18): manually completed days remain selectable in the log and offer Undo completion, including when the entire microcycle is complete. This reopens the day without touching Hevy. Saved-workout completions remain protected, and retries are safe.

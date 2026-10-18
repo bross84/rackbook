@@ -184,6 +184,7 @@ class EntryExercise(BaseModel):
 
 class WorkoutEntry(BaseModel):
     title: str
+    weight_unit: Literal['kg', 'lb'] | None = None
     description: str | None = None
     start_time: str
     end_time: str
@@ -527,7 +528,7 @@ def get_training_max(exercise_template_id: str):
 
 @app.post("/hevy/workouts", response_model=SavedWorkout, response_model_exclude_unset=True)
 def create_hevy_workout(entry: WorkoutEntry):
-    """Save a logged workout (weights in lb) to Hevy. Hevy has no delete endpoint, so each call
+    """Save a logged workout (kg weights, optional display unit) to Hevy. Each call
     that succeeds creates a real workout in the account."""
     if entry.planned_session:
         completed = _plan_call(mesocycles.validate_save, entry.planned_session, entry.start_time)
