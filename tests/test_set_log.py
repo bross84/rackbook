@@ -103,3 +103,57 @@ class TestSavingAWorkoutKeepsItsSets(SetLogRouteCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _hevy(workout_id, set_type, kg, reps, rpe):
+    return {"workout_id": workout_id, "workout_title": "Day 1", "workout_start_time": START,
+            "set_type": set_type, "weight_kg": kg, "reps": reps, "rpe": rpe}
+
+
+def _local(workout_id, set_type, reps, rpe):
+    return {"hevy_workout_id": workout_id, "set_type": set_type, "reps": reps, "rpe": rpe}
+
+
+class TestOverlayExactRpe(unittest.TestCase):
+
+    def test_fills_the_rpe_hevy_dropped_and_keeps_what_hevy_has(self):
+        hevy = [_hevy("w1", "warmup", 60, 5, None), _hevy("w1", "normal", 140, 1, 8), _hevy("w1", "normal", 110, 5, None)]
+        local = [_local("w1", "warmup", 5, None), _local("w1", "normal", 1, 8), _local("w1", "normal", 5, 5)]
+        out = set_log.overlay_exact_rpe(hevy, local)
+        self.assertEqual([None, 8, 5], [e["rpe"] for e in out])
+        self.assertIsNone(hevy[2]["rpe"], "the input must not be changed")
+
+    def test_never_overrides_an_rpe_hevy_stored(self):
+        out = set_log.overlay_exact_rpe([_hevy("w1", "normal", 100, 5, 7)], [_local("w1", "normal", 5, 6.5)])
+        self.assertEqual(7, out[0]["rpe"])
+
+    def test_workouts_we_did_not_log_are_untouched(self):
+        hevy = [_hevy("old", "normal", 100, 5, None)]
+        self.assertEqual(hevy, set_log.overlay_exact_rpe(hevy, [_local("w1", "normal", 5, 5)]))
+
+    def test_a_mismatched_workout_is_left_as_hevy_has_it(self):
+        for local in (
+            [_local("w1", "normal", 5, 5)],                                        # different count
+            [_local("w1", "normal", 4, 5), _local("w1", "normal", 5, 5)],          # reps differ
+            [_local("w1", "failure", 5, 5), _local("w1", "normal", 5, 5)],         # set type differs
+        ):
+            hevy = [_hevy("w1", "normal", 100, 5, None), _hevy("w1", "normal", 100, 5, None)]
+            out = set_log.overlay_exact_rpe(hevy, local)
+            self.assertEqual([None, None], [e["rpe"] for e in out])
+
+    def test_rows_without_a_hevy_workout_id_are_ignored(self):
+        out = set_log.overlay_exact_rpe([_hevy(None, "normal", 100, 5, None)], [_local(None, "normal", 5, 5)])
+        self.assertIsNone(out[0]["rpe"])
+
+
+class TestPreviousColumnUsesTheExactRpe(SetLogRouteCase):
+
+    def test_exercise_state_previous_sets_see_the_rpe_hevy_dropped(self):
+        self.client.post("/hevy/workouts", json=ENTRY)
+        self.hevy.exercise_history.return_value = [
+            _hevy("hevy-123", "warmup", 60, 5, None),
+            _hevy("hevy-123", "normal", 140, 1, 8),
+            _hevy("hevy-123", "normal", 110, 5, None),
+        ]
+        body = self.client.get("/hevy/exercise-state/tpl-squat").json()
+        self.assertEqual([None, 8.0, 5.0], [p["rpe"] for p in body["previous"]])

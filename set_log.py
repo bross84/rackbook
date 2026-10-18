@@ -89,3 +89,33 @@ def for_exercise(exercise_template_id: str) -> list[dict[str, Any]]:
             (exercise_template_id,),
         ).fetchall()
     return [dict(r) for r in found]
+
+
+def overlay_exact_rpe(entries: list[dict[str, Any]], local_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Hevy history with the RPE Hevy could not store filled back in from our own record.
+
+    A set's RPE is only filled when Hevy has none and we have one. Sets are matched by Hevy workout id and position
+    within the workout. A workout is left exactly as Hevy has it unless both sides hold the same number of sets with
+    the same reps and set type in the same order, so a mismatch can never put an RPE on the wrong set.
+    """
+    mine: dict[str, list[dict[str, Any]]] = {}
+    for row in local_rows:
+        if row.get("hevy_workout_id"):
+            mine.setdefault(row["hevy_workout_id"], []).append(row)
+    theirs: dict[str, list[int]] = {}
+    for index, entry in enumerate(entries):
+        if entry.get("workout_id") in mine:
+            theirs.setdefault(entry["workout_id"], []).append(index)
+    out = [dict(e) for e in entries]
+    for workout_id, indexes in theirs.items():
+        rows = mine[workout_id]
+        if len(rows) != len(indexes):
+            continue
+        if any(out[i].get("reps") != r.get("reps") or (out[i].get("set_type") or "normal") != r.get("set_type")
+               for i, r in zip(indexes, rows)):
+            continue
+        for i, r in zip(indexes, rows):
+            if out[i].get("rpe") is None and r.get("rpe") is not None:
+                out[i]["rpe"] = r["rpe"]
+    return out

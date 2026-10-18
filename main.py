@@ -610,6 +610,7 @@ def put_exercise_ref(exercise_template_id: str, data: ExerciseRefInput):
 def get_exercise_state(exercise_template_id: str):
     """A movement's current e1RM, worked out from its last session in Hevy with the user's RPE table."""
     entries = _call_hevy(lambda client: client.exercise_history(exercise_template_id))
+    entries = set_log.overlay_exact_rpe(entries, set_log.for_exercise(exercise_template_id))  # RPEs Hevy dropped
     return exercise_state.build_exercise_state(entries, get_rpe_percentage)
 
 
@@ -2234,6 +2235,7 @@ def get_progress_data(lift: Literal["squat", "bench", "deadlift", "press"]):
     if row is None:
         raise HTTPException(status_code=404, detail=f"'{title}' isn't in the exercise cache. Sync exercises first.")
     entries = _call_hevy(lambda client: client.exercise_history(row["id"]))
+    entries = set_log.overlay_exact_rpe(entries, set_log.for_exercise(row["id"]))  # RPEs Hevy dropped
     sessions = progress.e1rm_by_session(entries, get_rpe_percentage)
     sex = "female" if os.getenv("DOTS_SEX", "male").lower() == "female" else "male"
     series = progress.build_series(sessions, body_weight.list_body_measurements(), sex)
