@@ -9,6 +9,15 @@ const doc={id:'plan-1',name:'Strength block',completed:[],weeks:[{name:'Week 1',
  {id:'b',name:'Day B',exercises:[]}]},{name:'Week 2',sessions:[{id:'c',name:'Day C',exercises:[]}]}]};
 const context=vm.createContext({structuredClone,id:()=>String(++counter)});
 for(const name of ['cloneSession','nextSession'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
+context.dirty=false;context.remember=()=>{};context.renderEditor=()=>{};
+for(const name of ['newPlan','duplicateMicrocycle','recoverLegacyEditor'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
+context.newPlan();assert.equal(context.plan.weeks.length,1);assert.equal(context.plan.weeks[0].sessions.length,3);
+const single=structuredClone(doc);single.weeks=[single.weeks[0]];single.completed=[{session_id:'a'}];single.active=true;single.revision=3;
+context.duplicateMicrocycle(single);assert.equal(context.plan.id,undefined);assert.equal(context.plan.completed.length,0);assert.equal(context.plan.revision,0);
+assert.notEqual(context.plan.weeks[0].sessions[0].id,'a');assert.equal(single.weeks[0].sessions[0].id,'a');
+const legacy=structuredClone(doc);legacy.weeks[1].sessions[0].exercises=structuredClone(legacy.weeks[0].sessions[0].exercises);
+const recovery=context.recoverLegacyEditor({plan:legacy,wi:0});assert.equal(recovery.length,2);assert.equal(recovery[1].weeks.length,1);
+assert.equal(recovery[1].weeks[0].sessions[0].exercises.length,1);assert.equal(recovery[1].completed.length,0);
 const copy=context.cloneSession(doc.weeks[0].sessions[0]);
 assert.notEqual(copy.id,'a');assert.equal(copy.name,'Day A');
 copy.exercises[0].sets[0].rpe=9;assert.equal(doc.weeks[0].sessions[0].exercises[0].sets[0].rpe,8);
@@ -29,7 +38,7 @@ vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  
 (async()=>{
  await logContext.loadPlannedWorkout('plan-1','a');
  const draft=logContext.draft;
- assert.equal(draft.planned_session.session_id,'a');assert.equal(draft.planLabel,'Strength block · Week 1 · Day A');
+ assert.equal(draft.planned_session.session_id,'a');assert.equal(draft.planLabel,'Strength block · Day A');
  assert.equal(draft.exercises[0].ref.basis,'tm');
  const sets=draft.exercises[0].sets;
  assert.equal(sets[0].manual,false);assert.equal(sets[0].kg,'');assert.equal(sets[0].ts,true);

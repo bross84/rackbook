@@ -44,7 +44,7 @@ The six main pages share an inline `rackbook-theme` style block for the blue/sla
 | Page | File | What it is |
 |---|---|---|
 | `/log` | `log.html` | The workout log. The main page. |
-| `/mesocycles` | `mesocycles.html` | Plan weeks and workouts, activate a flexible sequence, and load prescribed sessions into the log |
+| `/microcycles` | `mesocycles.html` | Plan one week of workouts and load the flexible sequence into the log; `/mesocycles` remains an alias |
 | `/recent` | `recent.html` | Latest Hevy workouts |
 | `/progress` | `progress.html` | Each main lift's e1RM, 7-day bodyweight and DOTS-style score over time |
 | `/stress` | `stress.html` | Main three movement overview, selector, stress components, rolling totals, and retrospective session history |
@@ -103,7 +103,7 @@ Routes used by the log, RPE and progress pages (the legacy planner has many more
 
 ## Domain terms (as the app uses them)
 
-- **Mesocycle** — a flexible ordered series of workouts organised into weeks; no calendar dates or missed-day advancement. New plans start with one week/three workouts; the user can change the structure. Each session has a stable id. Plans live as validated JSON in `mesocycles`, with revision, active and archived flags. `mesocycle_completions` links a session to a saved Hevy workout. Only one plan can be active (partial unique index). These tables do not reuse or alter legacy program/block state.
+- **Microcycle** — a flexible ordered series of workouts covering one week; no calendar dates or missed-day advancement. New plans start with three workouts. There is no week selector, Add week or Copy week control. Duplicate a microcycle for reuse with fresh session ids and no completion marks. The API enforces exactly one week per plan, retaining its existing `weeks` wrapper and mesocycle endpoint/table names for compatibility. Each session has a stable id. Plans live as validated JSON in `mesocycles`, with revision, active and archived flags. `mesocycle_completions` links a session to a saved Hevy workout. Only one plan can be active (partial unique index). These tables do not reuse or alter legacy program/block state.
 - **Planned workout loading** — the builder or log start card loads a selected pending session into a new local draft, carrying reps, RPE, TS, notes and optional fixed kg. Automatic weights use current per-movement refs and loaded history; fixed weights set `manual=true`. Every loaded set starts unticked. A matching existing draft is resumed; replacement of a different draft requires confirmation. Plans are never overwritten by actual logged weights/reps. The payload's optional `planned_session` contains `mesocycle_id` and `session_id`; the server validates it before posting to Hevy and records completion only after success. Same-session/start retries reuse the recorded result; a different workout cannot complete the same prescription twice. Discard does not advance. Completion recording failures return a saved-workout warning rather than invite another Hevy post. Completed prescriptions cannot be edited/deleted from a plan; duplicate them to reuse. Future edits require the latest revision. Unsaved editor changes are backed up in device localStorage. Standalone frontend checks: `node tests/test_mesocycle_ui.cjs`.
 - **e1RM** — estimated one-rep max, in lb inside the code (`LB_PER_KG = 2.20462`). For a set: weight ÷ the RPE table's fraction for its reps and RPE.
 - **RPE table** — `(rpe, reps) → fraction of e1RM`. The user's table is built entirely on one fact: it depends only on **k = reps + (10 − RPE)**, the reps to failure the set is equivalent to. A 5 @7 and an 8 @10 are the same cell value. Verified on all comparable cells of `rpe_chart_user.csv`.
@@ -259,3 +259,5 @@ Local Docker on Windows (Docker Desktop) also works with the same compose file; 
 ## Development workflow
 
 The coding assistant handles architecture, implementation, debugging, and validation directly; Brian reviews and checks the result on his phone. Read this file, `CLAUDE.md` / `AGENTS.md`, `backlog.md`, and [`development.md`](development.md).
+
+Microcycle conversion (2026-10-17): startup atomically converts existing multiweek plans, retaining their original JSON in `mesocycle_week_backups`. Empty extra weeks are removed from the active document; populated or previously completed future weeks become separate one-week microcycles. Completion links move with their sessions. `mesocycle_session_aliases` resolves old URLs and in-flight log drafts, including idempotent save retries, to their new plan ids. Unsaved multiweek editor drafts are recovered as separate one-week drafts on the device. This feature does not use the legacy planner’s `microcycles` table.

@@ -378,7 +378,7 @@
   <header class="app-header">
     <div class="page-heading"><button id="pageBack" class="page-back" type="button" aria-label="Go back">← Back</button><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Log workout</h1></div></div>
     <div class="header-tools"><span class="units" role="group" aria-label="Weight unit"><button id="unitKg" type="button">kg</button><button id="unitLb" type="button">lb</button></span></div>
-    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/mesocycles">Mesocycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
+    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <div id="msg"></div>
 
@@ -951,27 +951,27 @@
     try {
       const plans = await api("/api/mesocycles"), plan = plans.find(p => p.active);
       box.replaceChildren();
-      const link = el("a", null, "Open mesocycle builder"); link.href = "/mesocycles";
-      if (!plan) { box.append(el("h2", null, "Plan ahead"), el("p", "muted", "Build a mesocycle and load your next workout here."), link); return; }
+      const link = el("a", null, "Open microcycle builder"); link.href = "/microcycles";
+      if (!plan) { box.append(el("h2", null, "Plan ahead"), el("p", "muted", "Build a microcycle and load your next workout here."), link); return; }
       const done = new Set(plan.completed.map(c => c.session_id));
       let next = null;
       for (const week of plan.weeks) for (const session of week.sessions) if (!next && !done.has(session.id)) next = { week, session };
       box.append(el("h2", null, plan.name));
       if (next) {
-        box.append(el("p", "muted", next.week.name + " · " + next.session.name));
+        box.append(el("p", "muted", next.session.name));
         if (next.session.exercises.length) {
           const start = el("button", "primary wide", "Load next planned workout"); start.type = "button";
           start.addEventListener("click", () => { start.disabled = true; loadPlannedWorkout(plan.id, next.session.id).catch(err => say(err.message)).finally(() => { start.disabled = false; }); });
           box.append(start);
         } else box.append(el("p", "muted", "Add movements to this workout in the builder before loading it."));
-      } else box.append(el("p", "muted", "Mesocycle complete. Create another plan when you are ready."));
+      } else box.append(el("p", "muted", "Microcycle complete. Create another plan when you are ready."));
       box.append(link);
     } catch (err) { box.replaceChildren(el("p", "muted", "Could not load planned workouts: " + err.message)); }
   }
 
   async function loadPlannedWorkout(planId, sessionId) {
     if (draft && draft.planned_session && draft.planned_session.mesocycle_id === planId && draft.planned_session.session_id === sessionId) return;
-    const plan = await api("/api/mesocycles/" + encodeURIComponent(planId));
+    const plan = await api("/api/mesocycles/" + encodeURIComponent(planId) + "/sessions/" + encodeURIComponent(sessionId));
     const week = plan.weeks.find(w => w.sessions.some(s => s.id === sessionId));
     const session = week && week.sessions.find(s => s.id === sessionId);
     if (!session || !session.exercises.length) throw new Error("This planned workout needs movements before you can load it.");
@@ -980,7 +980,7 @@
     draft = {
       title: session.name, startedAt: new Date().toISOString(),
       planned_session: { mesocycle_id: plan.id, session_id: session.id },
-      planLabel: plan.name + " · " + week.name + " · " + session.name,
+      planLabel: plan.name + " · " + session.name,
       exercises: session.exercises.map(ex => ({ id: uid(), template_id: ex.exercise_template_id,
         title: ex.title, notes: ex.notes || "", ref: refFromServer(ex.exercise_template_id),
         sets: ex.sets.map(s => ({type:s.type, ts:s.ts, kg:s.weight_kg == null ? "" : String(s.weight_kg),
@@ -992,7 +992,7 @@
   }
 
   async function loadPlannedQuery() {
-    const query = new URLSearchParams(location.search), planId = query.get("mesocycle"), sessionId = query.get("session");
+    const query = new URLSearchParams(location.search), planId = query.get("microcycle") || query.get("mesocycle"), sessionId = query.get("session");
     if (!planId || !sessionId) return;
     try { await loadPlannedWorkout(planId, sessionId); }
     catch (err) { say(err.message); }
@@ -1041,7 +1041,7 @@
     if (draft.planned_session) {
       origin.append(el("span", null, draft.planLabel || "Planned workout"));
       const detach = el("button", "link", "Use as unplanned workout"); detach.type = "button";
-      detach.addEventListener("click", () => { if (!confirm("Keep this workout, but stop linking it to the mesocycle?")) return; delete draft.planned_session; delete draft.planLabel; saveDraft(); renderWorkout(); });
+      detach.addEventListener("click", () => { if (!confirm("Keep this workout, but stop linking it to the microcycle?")) return; delete draft.planned_session; delete draft.planLabel; saveDraft(); renderWorkout(); });
       origin.append(detach);
     }
     const list = $("exercises"); list.replaceChildren();

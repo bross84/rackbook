@@ -1,5 +1,6 @@
 """Real temporary SQLite; Hevy is mocked for every workout-save test."""
 import os
+import json
 import shutil
 import tempfile
 import unittest
@@ -20,8 +21,8 @@ def document():
                 {'exercise_template_id':'squat','title':'Squat','sets':[
                     {'reps':1,'rpe':8,'ts':True}, {'reps':5,'rpe':7},
                     {'reps':5,'weight_kg':100}]}]},
-            {'id':'day-b','name':'Bench day','exercises':[]}]},
-        {'name':'Week 2','sessions':[{'id':'day-c','name':'Squat day','exercises':[]}]}]}
+            {'id':'day-b','name':'Bench day','exercises':[]},
+            {'id':'day-c','name':'Squat day','exercises':[]}]}]}
 
 
 class MesocycleCase(unittest.TestCase):
@@ -80,7 +81,7 @@ class MesocycleCase(unittest.TestCase):
         current['weeks'][0]['sessions'][0]['name']='Do not rewrite'
         self.assertEqual(409,self.client.put('/api/mesocycles/'+p['id'],json=current).status_code)
         current['weeks'][0]['sessions'][0]['name']='Squat day'
-        current['weeks'][1]['sessions'][0]['name']='Future edit'
+        current['weeks'][0]['sessions'][2]['name']='Future edit'
         self.assertEqual(200,self.client.put('/api/mesocycles/'+p['id'],json=current).status_code)
 
     def test_advance_only_after_success_and_retry_does_not_post_twice(self):
@@ -130,7 +131,7 @@ class MesocycleCase(unittest.TestCase):
     def test_validation_and_page(self):
         for change in ('duplicate','rpe','ts'):
             doc=document();sets=doc['weeks'][0]['sessions'][0]['exercises'][0]['sets']
-            if change=='duplicate':doc['weeks'][1]['sessions'][0]['id']='day-a'
+            if change=='duplicate':doc['weeks'][0]['sessions'][2]['id']='day-a'
             elif change=='rpe':sets[0]['rpe']=7.2
             else:sets[1]['ts']=True
             self.assertEqual(422,self.client.post('/api/mesocycles',json=doc).status_code)
@@ -145,6 +146,51 @@ class MesocycleCase(unittest.TestCase):
         main.init_db()
         restored=self.client.get('/api/mesocycles/'+p['id']).json()
         self.assertEqual(p['weeks'],restored['weeks'])
+
+    def test_old_multiweek_plans_split_without_losing_work_or_draft_links(self):
+        old=mesocycles.PlanInput(**document()).model_dump(exclude={'revision'})
+        future=deepcopy(old['weeks'][0]['sessions'][0]);future['id']='future'
+        old['weeks'] += [{'name':'Week 2','sessions':[future]},
+                         {'name':'Week 3','sessions':[{'id':'empty','name':'Empty','exercises':[]}]},
+                         {'name':'Week 4','sessions':[{'id':'past','name':'Completed','exercises':[]}]}]
+        with main.get_db() as conn:
+            conn.execute('INSERT INTO mesocycles (id,document,active) VALUES (?,?,1)',('old',json.dumps(old)))
+        mesocycles.complete(mesocycles.PlanLink(mesocycle_id='old',session_id='day-a'),'first','first-start')
+        mesocycles.complete(mesocycles.PlanLink(mesocycle_id='old',session_id='past'),'past-id','past-start')
+        mesocycles.migrate_single_week_plans()
+        plans=self.client.get('/api/mesocycles').json()
+        self.assertEqual(3,len(plans))
+        self.assertTrue(all(len(p['weeks'])==1 for p in plans))
+        with main.get_db() as conn:
+            backup=conn.execute('SELECT document FROM mesocycle_week_backups WHERE plan_id = ?',('old',)).fetchone()
+        self.assertEqual(old,json.loads(backup['document']))
+        resolved=self.client.get('/api/mesocycles/old/sessions/future').json()
+        self.assertNotEqual('old',resolved['id'])
+        self.assertTrue(resolved['active'])
+        self.assertEqual(future,resolved['weeks'][0]['sessions'][0])
+        past=mesocycles.resolve_plan('old','past')
+        self.assertEqual('past-id',past['completed'][0]['hevy_workout_id'])
+        link=mesocycles.PlanLink(mesocycle_id='old',session_id='future')
+        self.assertIsNone(mesocycles.validate_save(link,'future-start'))
+        mesocycles.complete(link,'future-id','future-start')
+        self.assertEqual('future-id',mesocycles.validate_save(link,'future-start')['hevy_workout_id'])
+        mesocycles.migrate_single_week_plans()
+        self.assertEqual({p['id'] for p in plans},{p['id'] for p in self.client.get('/api/mesocycles').json()})
+        self.assertEqual(422,self.client.post('/api/mesocycles',json=old).status_code)
+
+    def test_empty_extra_weeks_are_removed_and_old_page_alias_still_works(self):
+        old=document()
+        old['weeks'] += [{'name':'Week 2','sessions':[{'id':'empty','name':'Day 1','exercises':[]}]}]
+        with main.get_db() as conn:
+            conn.execute('INSERT INTO mesocycles (id,document) VALUES (?,?)',('old',json.dumps(old)))
+        mesocycles.migrate_single_week_plans()
+        plans=self.client.get('/api/mesocycles').json()
+        self.assertEqual(1,len(plans));self.assertEqual(1,len(plans[0]['weeks']))
+        for url in ('/microcycles','/mesocycles'):
+            html=self.client.get(url).text
+            self.assertIn('Microcycle Builder',html)
+            self.assertNotIn('id="addWeek"',html)
+            self.assertNotIn('Copy to next week',html)
 
 
 if __name__=='__main__':unittest.main()

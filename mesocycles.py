@@ -50,7 +50,7 @@ class PlannedWeek(BaseModel):
 class PlanInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     notes: str = Field(default='', max_length=4000)
-    weeks: list[PlannedWeek] = Field(min_length=1, max_length=26)
+    weeks: list[PlannedWeek] = Field(min_length=1, max_length=1)
     revision: int = Field(default=0, ge=0)
 
     @model_validator(mode='after')
@@ -88,7 +88,7 @@ class PlanError(Exception):
 def _row(conn, plan_id):
     row = conn.execute('SELECT * FROM mesocycles WHERE id = ?', (plan_id,)).fetchone()
     if row is None:
-        raise PlanError('Mesocycle not found', 404)
+        raise PlanError('Microcycle not found', 404)
     return row
 
 
@@ -110,6 +110,51 @@ def get_plan(plan_id):
         return _view(conn, _row(conn, plan_id))
 
 
+def resolve_plan(plan_id, session_id):
+    """Old links and in-flight log drafts survive splitting a multiweek plan."""
+    with get_db() as conn:
+        alias = conn.execute('SELECT plan_id FROM mesocycle_session_aliases WHERE original_plan_id = ? AND session_id = ?',
+                             (plan_id, session_id)).fetchone()
+        return _view(conn, _row(conn, alias['plan_id'] if alias else plan_id))
+
+
+def migrate_single_week_plans():
+    """Keep real future work and completions; remove only empty week scaffolding."""
+    with get_db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        for row in conn.execute('SELECT * FROM mesocycles').fetchall():
+            document = json.loads(row['document'])
+            if len(document['weeks']) <= 1:
+                continue
+            conn.execute('INSERT INTO mesocycle_week_backups (plan_id, document, revision) VALUES (?, ?, ?) ON CONFLICT(plan_id) DO NOTHING',
+                         (row['id'], row['document'], row['revision']))
+            completed = {r['session_id'] for r in conn.execute(
+                'SELECT session_id FROM mesocycle_completions WHERE mesocycle_id = ?', (row['id'],))}
+            kept = []
+            conn.execute('UPDATE mesocycles SET active = 0 WHERE id = ?', (row['id'],))
+            for index, week in enumerate(document['weeks']):
+                if index and not any(s['exercises'] or s['id'] in completed for s in week['sessions']):
+                    continue
+                target = row['id'] if index == 0 else str(uuid4())
+                data = dict(document, weeks=[week])
+                if index:
+                    data['name'] = (document['name'][:90] + ' · ' + week['name'][:25])[:120]
+                    conn.execute('INSERT INTO mesocycles (id, document, archived) VALUES (?, ?, ?)',
+                                 (target, json.dumps(data), row['archived']))
+                    for session in week['sessions']:
+                        conn.execute('INSERT INTO mesocycle_session_aliases (original_plan_id, session_id, plan_id) VALUES (?, ?, ?)',
+                                     (row['id'], session['id'], target))
+                        conn.execute('UPDATE mesocycle_completions SET mesocycle_id = ? WHERE mesocycle_id = ? AND session_id = ?',
+                                     (target, row['id'], session['id']))
+                else:
+                    conn.execute('UPDATE mesocycles SET document = ?, revision = revision + 1 WHERE id = ?',
+                                 (json.dumps(data), target))
+                kept.append((target, week))
+            if row['active']:
+                pending = next((target for target, week in kept if any(s['id'] not in completed and s['exercises'] for s in week['sessions'])), kept[0][0])
+                conn.execute('UPDATE mesocycles SET active = 1 WHERE id = ?', (pending,))
+
+
 def save_plan(data: PlanInput, plan_id=None):
     document = data.model_dump(exclude={'revision'})
     with get_db() as conn:
@@ -121,7 +166,7 @@ def save_plan(data: PlanInput, plan_id=None):
         else:
             row = _row(conn, plan_id)
             if row['archived']:
-                raise PlanError('This mesocycle is archived')
+                raise PlanError('This microcycle is archived')
             if row['revision'] != data.revision:
                 raise PlanError('This plan changed on another device. Reload it before saving.')
             old = {s['id']: s for w in json.loads(row['document'])['weeks'] for s in w['sessions']}
@@ -138,7 +183,7 @@ def activate(plan_id):
     with get_db() as conn:
         conn.execute('BEGIN IMMEDIATE')
         if _row(conn, plan_id)['archived']:
-            raise PlanError('This mesocycle is archived')
+            raise PlanError('This microcycle is archived')
         conn.execute('UPDATE mesocycles SET active = 0 WHERE active = 1')
         conn.execute('UPDATE mesocycles SET active = 1 WHERE id = ?', (plan_id,))
         return _view(conn, _row(conn, plan_id))
@@ -152,17 +197,17 @@ def archive(plan_id):
 
 def validate_save(link: PlanLink, start):
     """Validate before the irreversible Hevy post; retries return the saved result."""
-    with get_db() as conn:
-        plan = _view(conn, _row(conn, link.mesocycle_id))
-        if not any(s['id'] == link.session_id for w in plan['weeks'] for s in w['sessions']):
-            raise PlanError('The planned workout no longer exists. Reload it or save this as an unplanned workout.')
-        done = next((s for s in plan['completed'] if s['session_id'] == link.session_id), None)
-        if done and done['workout_start'] != start:
-            raise PlanError('This planned workout is already completed. Choose the next workout.')
-        return done
+    plan = resolve_plan(link.mesocycle_id, link.session_id)
+    if not any(s['id'] == link.session_id for w in plan['weeks'] for s in w['sessions']):
+        raise PlanError('The planned workout no longer exists. Reload it or save this as an unplanned workout.')
+    done = next((s for s in plan['completed'] if s['session_id'] == link.session_id), None)
+    if done and done['workout_start'] != start:
+        raise PlanError('This planned workout is already completed. Choose the next workout.')
+    return done
 
 
 def complete(link: PlanLink, hevy_id, start):
+    plan = resolve_plan(link.mesocycle_id, link.session_id)
     with get_db() as conn:
         conn.execute('INSERT INTO mesocycle_completions (mesocycle_id, session_id, hevy_workout_id, workout_start) VALUES (?, ?, ?, ?) ON CONFLICT(mesocycle_id, session_id) DO NOTHING',
-                     (link.mesocycle_id, link.session_id, hevy_id, start))
+                     (plan['id'], link.session_id, hevy_id, start))

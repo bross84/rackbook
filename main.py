@@ -39,6 +39,7 @@ from workout_view import summarize_workout
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    mesocycles.migrate_single_week_plans()
     yield
 
 
@@ -349,6 +350,7 @@ def log_page():
     return FileResponse("log.html", headers=NO_CACHE)
 
 
+@app.get('/microcycles')
 @app.get('/mesocycles')
 def mesocycle_page():
     return FileResponse('mesocycles.html', headers=NO_CACHE)
@@ -374,6 +376,11 @@ def create_mesocycle(data: mesocycles.PlanInput):
 @app.get('/api/mesocycles/{plan_id}', response_model=mesocycles.PlanView)
 def get_mesocycle(plan_id: str):
     return _plan_call(mesocycles.get_plan, plan_id)
+
+
+@app.get('/api/mesocycles/{plan_id}/sessions/{session_id}', response_model=mesocycles.PlanView)
+def resolve_microcycle_session(plan_id: str, session_id: str):
+    return _plan_call(mesocycles.resolve_plan, plan_id, session_id)
 
 
 @app.put('/api/mesocycles/{plan_id}', response_model=mesocycles.PlanView)
@@ -528,7 +535,7 @@ def create_hevy_workout(entry: WorkoutEntry):
             mesocycles.complete(entry.planned_session, created.get('id'), entry.start_time)
         except Exception:
             logger.exception('Workout saved, but mesocycle progress could not be recorded')
-            warning = 'Saved to Hevy, but mesocycle progress could not be updated. Do not save the workout again.'
+            warning = 'Saved to Hevy, but microcycle progress could not be updated. Do not save the workout again.'
     stress_service.invalidate(ex.exercise_template_id for ex in entry.exercises)
     training_max.record(ts_rows, entry.start_time)  # only once Hevy has the workout
     try:

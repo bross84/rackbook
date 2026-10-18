@@ -39,6 +39,18 @@ def init_db() -> None:
                 completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (mesocycle_id, session_id)
             );
+            CREATE TABLE IF NOT EXISTS mesocycle_session_aliases (
+                original_plan_id TEXT NOT NULL REFERENCES mesocycles(id),
+                session_id TEXT NOT NULL,
+                plan_id TEXT NOT NULL REFERENCES mesocycles(id),
+                PRIMARY KEY (original_plan_id, session_id)
+            );
+            CREATE TABLE IF NOT EXISTS mesocycle_week_backups (
+                plan_id TEXT PRIMARY KEY REFERENCES mesocycles(id),
+                document TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                backed_up_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS programs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
