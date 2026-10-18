@@ -1690,7 +1690,7 @@
         if (kg !== null && (isNaN(kg) || kg < 0)) throw new Error(where + ": the weight isn't a number.");
         const logged = s.arpe || s.rpe;
         if (s.ts && !(kg > 0 && reps > 0 && logged)) throw new Error(where + ": the TS set needs a weight, reps and an RPE.");
-        sets.push({ type: s.type, weight_kg: kg === null ? null : Math.round(kg * 100) / 100, reps, rpe: !logged ? null : Number(logged), ...(s.ts ? { ts: true } : {}) });
+        sets.push({ type: s.type, weight_kg: kg, reps, rpe: !logged ? null : Number(logged), ...(s.ts ? { ts: true } : {}) });
       }
       if (sets.length) exercises.push({ exercise_template_id: ex.template_id, title: ex.title, notes: ex.notes, sets });
     }

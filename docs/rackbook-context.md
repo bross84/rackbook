@@ -15,6 +15,8 @@ One user (Brian), one Hevy account. The app has no login; it is meant to sit on 
 
 ### How it is used
 
+Saving preserves the logged kg value without additional rounding in the frontend or Hevy payload builder, including precision from pound entries. Movement increments still round automatically planned weights; they do not round uploads.
+
 On desktop (a mouse/fine pointer), the log's RPE field accepts direct numeric entry, with an adjacent arrow for the existing popup picker. Touch devices retain the full-size picker button. Both use RPE 4–10 in steps of 0.5, or blank for unrated. Invalid typed input blocks ticking and saving until corrected; Enter finishes editing and Escape returns to the last accepted value. This changes only entry: unticked RPE plans the weight, and completed-set RPE records the actual effort without changing its weight. Run `node tests/test_log_rpe_entry.cjs` for the standalone frontend regression checks.
 
 Touch weight/reps fields use `inputmode="none"` and a docked number pad with a fixed Backspace/Clear/Next/Done column. Decimal stays in place but is disabled for reps. A newly opened field selects its current value; edits use its selection and dispatch the usual input event, retaining planning and draft saving. Next advances weight → reps → next set's weight (not RPE); Done closes the pad without ticking or saving a set. The page scrolls the field above the pad and hides the bottom workout bar while it is open. Tapping elsewhere, Escape, or a workout redraw closes it. Mouse entry uses the ordinary keyboard, including on hybrid devices. RPE continues to use its existing picker on touch. Regression checks: `node tests/test_log_keypad.cjs`.

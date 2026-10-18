@@ -39,9 +39,9 @@ class TestWeight(unittest.TestCase):
         for kg in (0.5, 1, 1.25, 2.5, 5, 46.25, 47.5, 100, 0):
             self.assertEqual(float(kg), self._kg(kg), kg)
 
-    def test_extra_decimals_are_trimmed_to_two(self):
-        self.assertEqual(46.25, self._kg(46.2500001))
-        self.assertEqual(47.5, self._kg(47.499))
+    def test_upload_preserves_precision_including_converted_pounds(self):
+        for kg in (46.2500001,47.499,132.34 / 2.20462262185):
+            self.assertEqual(kg,self._kg(kg))
 
 
 class TestBody(unittest.TestCase):

@@ -25,7 +25,7 @@ def _parse_time(value: str) -> datetime:
 
 def build_hevy_workout(entry: dict[str, Any]) -> dict[str, Any]:
     """
-    Convert a logged workout (weights in lb) into Hevy's request body.
+    Convert a logged workout (weights in kg) into Hevy's request body without rounding.
     Raises ValueError if the workout can't be sent.
     """
     title = (entry.get("title") or "").strip()
@@ -66,7 +66,7 @@ def build_hevy_workout(entry: dict[str, Any]) -> dict[str, Any]:
             sets.append(
                 {
                     "type": set_type,
-                    "weight_kg": round(float(weight_kg), 2) if weight_kg is not None else None,
+                    "weight_kg": float(weight_kg) if weight_kg is not None else None,
                     "reps": reps,
                     "rpe": float(rpe) if rpe is not None else None,
                 }
