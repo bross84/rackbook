@@ -378,11 +378,12 @@
   <header class="app-header">
     <div class="page-heading"><button id="pageBack" class="page-back" type="button" aria-label="Go back">← Back</button><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Log workout</h1></div></div>
     <div class="header-tools"><span class="units" role="group" aria-label="Weight unit"><button id="unitKg" type="button">kg</button><button id="unitLb" type="button">lb</button></span></div>
-    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
+    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/mesocycles">Mesocycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <div id="msg"></div>
 
   <section id="start" hidden>
+    <section id="plannedStart" class="card" hidden></section>
     <button id="empty" class="wide" type="button" style="margin-bottom:12px">Start an empty workout</button>
     <p class="muted" style="margin:0 0 8px">Or copy a recent workout. Its exercises and sets come across as a starting point.</p>
     <div id="recent"></div>
@@ -393,6 +394,7 @@
       <input id="title" type="text" aria-label="Workout title" autocomplete="off" />
       <p id="clock" class="muted" style="margin:6px 0 0"></p>
       <p class="hint">Before ✓ the RPE plans the weight. Tap ✓ right after the set: the RPE you set then is the one you logged, and the weight stays.</p>
+      <div id="plannedOrigin" class="hint" hidden></div>
     </div>
     <div id="exercises"></div>
     <div class="workout-actions">
@@ -924,6 +926,7 @@
 
   async function renderStart() {
     show("start");
+    loadPlannedStart();
     const box = $("recent"); box.replaceChildren(el("p", "muted", "Loading recent workouts…"));
     try {
       recentPage = recentPage || (await api("/hevy/workouts?page=1&page_size=10"));
@@ -940,6 +943,60 @@
       box.replaceChildren();
       say(err.message + (err.status === 400 ? " Save your Hevy key on the Recent page first." : ""));
     }
+  }
+
+  async function loadPlannedStart() {
+    const box = $("plannedStart");
+    box.hidden = false; box.replaceChildren(el("p", "muted", "Loading planned workout…"));
+    try {
+      const plans = await api("/api/mesocycles"), plan = plans.find(p => p.active);
+      box.replaceChildren();
+      const link = el("a", null, "Open mesocycle builder"); link.href = "/mesocycles";
+      if (!plan) { box.append(el("h2", null, "Plan ahead"), el("p", "muted", "Build a mesocycle and load your next workout here."), link); return; }
+      const done = new Set(plan.completed.map(c => c.session_id));
+      let next = null;
+      for (const week of plan.weeks) for (const session of week.sessions) if (!next && !done.has(session.id)) next = { week, session };
+      box.append(el("h2", null, plan.name));
+      if (next) {
+        box.append(el("p", "muted", next.week.name + " · " + next.session.name));
+        if (next.session.exercises.length) {
+          const start = el("button", "primary wide", "Load next planned workout"); start.type = "button";
+          start.addEventListener("click", () => { start.disabled = true; loadPlannedWorkout(plan.id, next.session.id).catch(err => say(err.message)).finally(() => { start.disabled = false; }); });
+          box.append(start);
+        } else box.append(el("p", "muted", "Add movements to this workout in the builder before loading it."));
+      } else box.append(el("p", "muted", "Mesocycle complete. Create another plan when you are ready."));
+      box.append(link);
+    } catch (err) { box.replaceChildren(el("p", "muted", "Could not load planned workouts: " + err.message)); }
+  }
+
+  async function loadPlannedWorkout(planId, sessionId) {
+    if (draft && draft.planned_session && draft.planned_session.mesocycle_id === planId && draft.planned_session.session_id === sessionId) return;
+    const plan = await api("/api/mesocycles/" + encodeURIComponent(planId));
+    const week = plan.weeks.find(w => w.sessions.some(s => s.id === sessionId));
+    const session = week && week.sessions.find(s => s.id === sessionId);
+    if (!session || !session.exercises.length) throw new Error("This planned workout needs movements before you can load it.");
+    if (plan.completed.some(s => s.session_id === sessionId)) throw new Error("This planned workout is already completed. Choose the next one in the builder.");
+    if (draft && !confirm("Replace the current workout draft with this planned workout?")) return;
+    draft = {
+      title: session.name, startedAt: new Date().toISOString(),
+      planned_session: { mesocycle_id: plan.id, session_id: session.id },
+      planLabel: plan.name + " · " + week.name + " · " + session.name,
+      exercises: session.exercises.map(ex => ({ id: uid(), template_id: ex.exercise_template_id,
+        title: ex.title, notes: ex.notes || "", ref: refFromServer(ex.exercise_template_id),
+        sets: ex.sets.map(s => ({type:s.type, ts:s.ts, kg:s.weight_kg == null ? "" : String(s.weight_kg),
+          reps:String(s.reps), rpe:s.rpe == null ? "" : String(s.rpe), done:false, manual:s.weight_kg != null}))
+      }))
+    };
+    saveDraft(); say(""); renderWorkout();
+    draft.exercises.forEach(loadState);
+  }
+
+  async function loadPlannedQuery() {
+    const query = new URLSearchParams(location.search), planId = query.get("mesocycle"), sessionId = query.get("session");
+    if (!planId || !sessionId) return;
+    try { await loadPlannedWorkout(planId, sessionId); }
+    catch (err) { say(err.message); }
+    finally { history.replaceState(null, "", "/log"); }
   }
 
   function startFrom(w) {
@@ -980,6 +1037,13 @@
     const stay = !$("workout").hidden, y = window.scrollY;   // redrawing the workout you are already on keeps your place
     show("workout");
     $("title").value = draft.title;
+    const origin = $("plannedOrigin"); origin.hidden = !draft.planned_session; origin.replaceChildren();
+    if (draft.planned_session) {
+      origin.append(el("span", null, draft.planLabel || "Planned workout"));
+      const detach = el("button", "link", "Use as unplanned workout"); detach.type = "button";
+      detach.addEventListener("click", () => { if (!confirm("Keep this workout, but stop linking it to the mesocycle?")) return; delete draft.planned_session; delete draft.planLabel; saveDraft(); renderWorkout(); });
+      origin.append(detach);
+    }
     const list = $("exercises"); list.replaceChildren();
     cardEls.clear(); setE1Cells.clear(); setStressCells.clear();
     for (const ex of draft.exercises) { const card = renderExercise(ex); cardEls.set(ex.id, card); list.append(card); }
@@ -1572,7 +1636,8 @@
       if (sets.length) exercises.push({ exercise_template_id: ex.template_id, title: ex.title, notes: ex.notes, sets });
     }
     if (!exercises.length) throw new Error("Tap ✓ on each set you did before saving.");
-    return { title: draft.title.trim() || "Workout", start_time: draft.startedAt, end_time: new Date().toISOString(), exercises };
+    return { title: draft.title.trim() || "Workout", start_time: draft.startedAt, end_time: new Date().toISOString(), exercises,
+      ...(draft.planned_session ? { planned_session: draft.planned_session } : {}) };
   }
 
   $("finish").addEventListener("click", async () => {
@@ -1584,6 +1649,7 @@
       const saved = await api("/hevy/workouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) });
       clearDraft();
       show("done");
+      $("done").querySelector(".msg").textContent = saved.plan_warning || "Saved to Hevy.";
     } catch (err) {
       say(err.message + " Your workout is still here. If you're not sure it saved, check Recent workouts before trying again.");
       window.scrollTo(0, 0);
@@ -1821,6 +1887,7 @@
       renderWorkout();
       draft.exercises.forEach(loadState);
     } else { draft = null; renderStart(); }
+    loadPlannedQuery();
   });
 </script>
 

@@ -29,6 +29,7 @@ import rpe_observed
 import set_log
 import stress_index
 import stress_service
+import mesocycles
 import training_max
 from wave_math import bbb_weight, epley, joker_qualifies, joker_weight, round_weight, session_e1rm, working_weight
 from workout_payload import build_hevy_workout
@@ -185,10 +186,12 @@ class WorkoutEntry(BaseModel):
     start_time: str
     end_time: str
     exercises: list[EntryExercise]
+    planned_session: mesocycles.PlanLink | None = None
 
 
 class SavedWorkout(BaseModel):
     id: str | None = None
+    plan_warning: str | None = None
 
 
 class TrainingMax(BaseModel):
@@ -346,6 +349,49 @@ def log_page():
     return FileResponse("log.html", headers=NO_CACHE)
 
 
+@app.get('/mesocycles')
+def mesocycle_page():
+    return FileResponse('mesocycles.html', headers=NO_CACHE)
+
+
+def _plan_call(fn, *args):
+    try:
+        return fn(*args)
+    except mesocycles.PlanError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+
+@app.get('/api/mesocycles', response_model=list[mesocycles.PlanView])
+def list_mesocycles():
+    return mesocycles.list_plans()
+
+
+@app.post('/api/mesocycles', response_model=mesocycles.PlanView)
+def create_mesocycle(data: mesocycles.PlanInput):
+    return _plan_call(mesocycles.save_plan, data)
+
+
+@app.get('/api/mesocycles/{plan_id}', response_model=mesocycles.PlanView)
+def get_mesocycle(plan_id: str):
+    return _plan_call(mesocycles.get_plan, plan_id)
+
+
+@app.put('/api/mesocycles/{plan_id}', response_model=mesocycles.PlanView)
+def update_mesocycle(plan_id: str, data: mesocycles.PlanInput):
+    return _plan_call(mesocycles.save_plan, data, plan_id)
+
+
+@app.post('/api/mesocycles/{plan_id}/activate', response_model=mesocycles.PlanView)
+def activate_mesocycle(plan_id: str):
+    return _plan_call(mesocycles.activate, plan_id)
+
+
+@app.post('/api/mesocycles/{plan_id}/archive', status_code=204)
+def archive_mesocycle(plan_id: str):
+    _plan_call(mesocycles.archive, plan_id)
+    return Response(status_code=204)
+
+
 @app.get("/rpe-table", response_model=RpeTable)
 def get_rpe_table():
     """The RPE table in use, so the log page can turn an RPE and reps into a percentage of e1RM."""
@@ -461,16 +507,28 @@ def get_training_max(exercise_template_id: str):
     return training_max.latest(exercise_template_id)
 
 
-@app.post("/hevy/workouts", response_model=SavedWorkout)
+@app.post("/hevy/workouts", response_model=SavedWorkout, response_model_exclude_unset=True)
 def create_hevy_workout(entry: WorkoutEntry):
     """Save a logged workout (weights in lb) to Hevy. Hevy has no delete endpoint, so each call
     that succeeds creates a real workout in the account."""
+    if entry.planned_session:
+        completed = _plan_call(mesocycles.validate_save, entry.planned_session, entry.start_time)
+        if completed:
+            return {'id': completed['hevy_workout_id']}
     try:
         body = build_hevy_workout(entry.model_dump())
         ts_rows = training_max.ts_rows_from_entry(entry.model_dump(), get_rpe_percentage)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     created = _call_hevy(lambda client: client.create_workout(body))
+    warning = None
+    if entry.planned_session:
+        try:
+            # Record the Hevy result before other local writes, so a retry can reuse it.
+            mesocycles.complete(entry.planned_session, created.get('id'), entry.start_time)
+        except Exception:
+            logger.exception('Workout saved, but mesocycle progress could not be recorded')
+            warning = 'Saved to Hevy, but mesocycle progress could not be updated. Do not save the workout again.'
     stress_service.invalidate(ex.exercise_template_id for ex in entry.exercises)
     training_max.record(ts_rows, entry.start_time)  # only once Hevy has the workout
     try:
@@ -478,7 +536,7 @@ def create_hevy_workout(entry: WorkoutEntry):
     except Exception:
         # Hevy already has the workout; failing here would make a retry post it twice
         logger.exception("Could not record the sets of workout %s locally", created.get("id"))
-    return {"id": created.get("id")}
+    return {"id": created.get("id"), **({'plan_warning': warning} if warning else {})}
 
 
 # ── Settings ───────────────────────────────────────────────────────────────────

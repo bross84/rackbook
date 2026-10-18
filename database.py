@@ -22,6 +22,23 @@ def init_db() -> None:
             pass  # already renamed, or new DB (table doesn't exist yet)
 
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS mesocycles (
+                id TEXT PRIMARY KEY,
+                document TEXT NOT NULL,
+                revision INTEGER NOT NULL DEFAULT 1,
+                active INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS one_active_mesocycle ON mesocycles(active) WHERE active = 1;
+            CREATE TABLE IF NOT EXISTS mesocycle_completions (
+                mesocycle_id TEXT NOT NULL REFERENCES mesocycles(id),
+                session_id TEXT NOT NULL,
+                hevy_workout_id TEXT,
+                workout_start TEXT NOT NULL,
+                completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (mesocycle_id, session_id)
+            );
             CREATE TABLE IF NOT EXISTS programs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,

@@ -8,7 +8,8 @@ Deployed via Docker on CasaOS, used as a desktop and mobile PWA. It has no login
 
 ## What it does
 
-- **Workout log** (`/log`) — start empty or copy a recent Hevy workout (its warm-ups are not copied), pick exercises, tick sets off, and save the finished workout to Hevy via `POST /v1/workouts`. A draft lives in the browser until you save.
+- **Workout log** (`/log`) — load a planned mesocycle workout, start empty or copy a recent Hevy workout (its warm-ups are not copied), pick exercises, tick sets off, and save the finished workout to Hevy via `POST /v1/workouts`. A draft lives in the browser until you save.
+- **Mesocycle builder** (`/mesocycles`) — plan weeks and workouts with per-set reps, RPE, optional fixed weights and TS markers. Copy weeks forward, save and activate a plan, then load its next workout from the log. The sequence advances only when a workout saves successfully, without calendar dates. Saved plans and completion history live in the app's SQLite volume.
   - Weights are entered and posted in kg, with lb beside them as a reference; a kg/lb switch flips which one you type in.
   - Set a weight by RPE: it is filled in from the RPE table and a base number per movement, either the e1RM or the TM. LSe1RM can plan each set from the last ticked set's e1RM instead.
   - **TS** — mark a set as a movement's TS. It pins that movement's e1RM (nothing outranks it, even a higher set), and when the workout is saved it sets the movement's TM (its e1RM × the TM %), which holds until the next saved TS.
