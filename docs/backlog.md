@@ -29,6 +29,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Builder movement picker (2026-10-18): default and search results use most recently trained order from the latest ten Hevy workouts, matching the log's recent-history source. Remaining movements sort alphabetically. Refresh list sits in a separate footer; a history failure keeps the catalog usable and explains the alphabetical fallback.
+
 - Incomplete naming previews (2026-10-18): blank or invalid Cycle/Week values show `?` in generated names instead of `null`. Blank inputs remain blank through redraws and draft restoration; required numeric validation still blocks saving until corrected.
 
 - Program workout naming (2026-10-18): editable Program, Cycle and Week generate names such as BS-Bridge1.1.1, with the day number following workout order. Duplicating a microcycle increments Week and resets completion with fresh session ids. Existing custom names remain until a program is entered. Completed prescriptions retain their names; duplicate the microcycle to change its naming fields.

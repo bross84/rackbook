@@ -3,6 +3,17 @@ const assert=require('node:assert/strict'), fs=require('node:fs'), vm=require('n
 const root=path.join(__dirname,'..'), builder=fs.readFileSync(path.join(root,'mesocycles.html'),'utf8'), log=fs.readFileSync(path.join(root,'log.html'),'utf8');
 for(const html of [builder,log])for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);
 let counter=0;
+const pickerContext=vm.createContext({});
+vm.runInContext(builder.match(/function sortedExerciseMatches\([^\n]+/)[0],pickerContext);
+const movements=[{id:'a',title:'Assisted Squat'},{id:'b',title:'Bench Press'},{id:'s',title:'Squat Low Bar'},{id:'z',title:'Zercher Squat'}];
+const history=[{start_time:'2026-10-01T12:00:00Z',exercises:[{exercise_template_id:'s',title:'Squat Low Bar'}]},
+ {start_time:'2026-10-18T12:00:00Z',exercises:[{exercise_template_id:'s',title:'Squat Low Bar'},{exercise_template_id:'new',title:'New Squat'}]},
+ {start_time:'2026-10-16T12:00:00Z',exercises:[{exercise_template_id:'z',title:'Zercher Squat'}]}];
+assert.equal(pickerContext.sortedExerciseMatches(movements,history,'').map(x=>x.id).join(','),'new,s,z,a,b');
+assert.equal(pickerContext.sortedExerciseMatches(movements,history,'SQUAT').map(x=>x.id).join(','),'new,s,z,a');
+assert.equal(pickerContext.sortedExerciseMatches(movements,history,'bar squat').map(x=>x.id).join(','),'s');
+assert.equal(pickerContext.sortedExerciseMatches(movements,[],'').map(x=>x.id).join(','),'a,b,s,z');
+assert.equal(pickerContext.sortedExerciseMatches(movements,history,'unmatched').length,0);
 const doc={id:'plan-1',name:'Strength block',completed:[],weeks:[{name:'Week 1',sessions:[
  {id:'a',name:'Day A',exercises:[{exercise_template_id:'squat',title:'Squat',notes:'Controlled reps',sets:[
   {reps:1,rpe:8,weight_kg:null,type:'normal',ts:true},{reps:5,rpe:6,weight_kg:100,type:'normal',ts:false}]}]},
