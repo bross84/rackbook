@@ -103,7 +103,7 @@ dialog {color:var(--text);background:var(--card);border:1px solid var(--line);bo
 <div id="library" class="library"></div>
 <form id="editor" hidden>
  <section class="card editor-title"><label>Microcycle name<input id="planName" required maxlength="120"></label><label>Notes<textarea id="planNotes" rows="2" maxlength="4000"></textarea></label></section>
- <div class="editor-layout"><aside class="card sidebar"><h3>Workouts</h3><div id="weeks"></div></aside><section class="card"><div id="sessionEditor"></div></section></div>
+ <div class="editor-layout"><aside class="card sidebar"><h3>Days</h3><div id="weeks"></div><button id="addDay" type="button">+ Add day</button></aside><section class="card"><div id="sessionEditor"></div></section></div>
  <div class="row savebar"><span id="saveState" class="muted grow"></span><button id="savePlan" class="primary" type="submit">Save plan</button><button id="usePlan" type="button">Use this microcycle</button></div>
 </form>
 <dialog id="exercisePicker" aria-label="Add movement"><div class="row"><h2 class="grow">Add movement</h2><button id="closeExercisePicker" type="button">Close</button></div><label>Find an exercise<input id="exerciseSearch" type="search" placeholder="Search your Hevy exercises"></label><button id="syncExercises" type="button">Refresh exercise list</button><div id="exerciseResults"></div></dialog>
@@ -132,18 +132,20 @@ function renderLibrary() {
  const box=$('library');box.replaceChildren();if(!plans.length)box.append(el('p','muted','No plans yet. Create one, add your movements, and save it here.'));
  for(const draft of recovered)box.append(button('Recovered draft: '+draft.name,()=>{openPlan(draft);remember();}));
  for(const p of plans){const card=el('section','card'),next=nextSession(p);card.append(el('h3',null,p.name),el('p','muted',(p.active?'Active · ':'')+p.weeks[0].sessions.length+' workouts · '+p.completed.length+' workouts completed'));
-  if(next)card.append(el('p','muted','Next: '+next.s.name));else card.append(el('p','muted','Microcycle complete'));
+  if(next)card.append(el('p','muted','Next: '+next.s.name));else card.append(el('p','muted',p.weeks[0].sessions.length?'Microcycle complete':'No days yet'));
   const actions=el('div','row');actions.append(button('Edit plan',()=>openPlan(p)),button('Duplicate microcycle',()=>duplicateMicrocycle(p)));
   if(next&&next.s.exercises.length){const a=el('a',null,'Start next workout');a.href=startUrl(p,next.s);actions.append(a);}card.append(actions);box.append(card);}
 }
 async function refreshPlans(){plans=await api('/api/mesocycles');renderLibrary();}
-function newPlan(){if(dirty&&!confirm('Replace your unsaved plan edits?'))return;plan={name:'New microcycle',notes:'',revision:0,completed:[],weeks:Array.from({length:1},(_,w)=>({name:'Week '+(w+1),sessions:Array.from({length:3},(_,d)=>({id:id(),name:'Day '+(d+1),exercises:[]}))}))};wi=si=0;remember();renderEditor();}
-function renderWeeks(){const box=$('weeks');box.replaceChildren();wi=0;plan.weeks[0].sessions.forEach((s,j)=>{const b=button((completed(s)?'✓ ':'')+s.name,()=>{si=j;renderWeeks();renderSession();},'session-tab');b.setAttribute('aria-label',b.textContent);b.setAttribute('aria-current',String(j===si));box.append(b);});}
+function newPlan(){if(dirty&&!confirm('Replace your unsaved plan edits?'))return;plan={name:'New microcycle',notes:'',revision:0,completed:[],weeks:[{name:'Week 1',sessions:[]}]};wi=si=0;remember();renderEditor();}
+function addDay(){if(plan.weeks[0].sessions.length>=14)return message('A microcycle can have up to 14 days.');let n=1;while(plan.weeks[0].sessions.some(s=>s.name==='Day '+n))n++;plan.weeks[0].sessions.push({id:id(),name:'Day '+n,exercises:[]});si=plan.weeks[0].sessions.length-1;remember();renderEditor();}
+function removeDay(){const s=session();if(!s)return;if(completed(s))return message('Completed days retain their history. Duplicate the microcycle to plan a fresh week.');if(s.exercises.length&&!confirm('Remove this day and its planned movements?'))return;plan.weeks[0].sessions.splice(si,1);si=Math.max(0,Math.min(si,plan.weeks[0].sessions.length-1));remember();renderEditor();}
+function renderWeeks(){const box=$('weeks');box.replaceChildren();wi=0;si=Math.max(0,Math.min(si,plan.weeks[0].sessions.length-1));$('addDay').disabled=plan.weeks[0].sessions.length>=14;plan.weeks[0].sessions.forEach((s,j)=>{const b=button((completed(s)?'✓ ':'')+s.name,()=>{si=j;renderWeeks();renderSession();},'session-tab');b.setAttribute('aria-label',b.textContent);b.setAttribute('aria-current',String(j===si));box.append(b);});}
 function nameField(label,value,change){const wrap=el('label',null,label),input=el('input');input.value=value;input.required=true;input.maxLength=120;input.addEventListener('input',()=>{change(input.value);remember();});input.addEventListener('change',renderWeeks);wrap.append(input);return wrap;}
 function numeric(value,label,attrs,change){const input=el('input');input.type='number';input.value=value??'';input.setAttribute('aria-label',label);for(const[k,v]of Object.entries(attrs))input.setAttribute(k,v);input.addEventListener('input',()=>{change(input.value===''?null:Number(input.value));remember();});return input;}
-function renderSession(){const box=$('sessionEditor'),s=session(),done=completed(s);box.replaceChildren();
- const titleRow=el('div','row editor-tools');titleRow.append(nameField('Workout name',s.name,v=>s.name=v),button('Duplicate workout',()=>{if(plan.weeks[wi].sessions.length>=14)return message('A week can have up to 14 workouts.');const copy=cloneSession(s);copy.name+=' copy';plan.weeks[wi].sessions.push(copy);si=plan.weeks[wi].sessions.length-1;remember();renderEditor();}));box.append(titleRow);
- const tools=el('div','row editor-tools');tools.append(button('+ Workout',()=>{if(plan.weeks[wi].sessions.length>=14)return message('A week can have up to 14 workouts.');plan.weeks[wi].sessions.push({id:id(),name:'Day '+(plan.weeks[wi].sessions.length+1),exercises:[]});si=plan.weeks[wi].sessions.length-1;remember();renderEditor();}),button('Remove workout',()=>{if(!confirm('Remove this planned workout?'))return;const week=plan.weeks[wi];if(week.sessions.length===1)return message('Keep at least one workout in the microcycle.');week.sessions.splice(si,1);si=0;remember();renderEditor();},'danger'));box.append(tools);
+function renderSession(){const box=$('sessionEditor'),s=session();box.replaceChildren();if(!s){box.append(el('p','empty','No days yet. Add a day to start planning.'),button('Add first day',addDay));return;}const done=completed(s);
+ const titleRow=el('div','row editor-tools');titleRow.append(nameField('Day name',s.name,v=>s.name=v),button('Duplicate day',()=>{if(plan.weeks[wi].sessions.length>=14)return message('A week can have up to 14 workouts.');const copy=cloneSession(s);copy.name+=' copy';plan.weeks[wi].sessions.push(copy);si=plan.weeks[wi].sessions.length-1;remember();renderEditor();}));box.append(titleRow);
+ const tools=el('div','row editor-tools');const remove=button('Remove day',removeDay,'danger');remove.disabled=done;if(done)remove.title='Completed days retain their history';tools.append(remove);box.append(tools);
  if(done)box.append(el('p','muted','Completed workout: duplicate it to make a new session. Its original prescription stays intact.'));
  const fields=el('fieldset');fields.disabled=done;fields.style.cssText='border:0;padding:0;margin:0;min-width:0';
  if(!s.exercises.length)fields.append(el('p','empty','Add a movement to begin planning this workout.'));
@@ -155,13 +157,13 @@ function renderSession(){const box=$('sessionEditor'),s=session(),done=completed
  fields.append(button('+ Movement',openPicker));box.append(fields,el('p','muted','Leave weight blank to plan from the movement’s current e1RM/TM and target RPE when you load the workout. Fixed weights override automatic loading. TS takes effect only after a checked set is saved.'));
  if(plan.id&&!dirty&&!done&&s.exercises.length){const a=el('a',null,'Load this workout into the log');a.href=startUrl(plan,s);box.append(a);}
  // Completed prescriptions are immutable; naming fields must also respect this.
- titleRow.querySelector('input').disabled=done;tools.querySelectorAll('button')[1].disabled=done;
+ titleRow.querySelector('input').disabled=done;
 }
-function renderEditor(){$('editor').hidden=false;$('planName').value=plan.name;$('planNotes').value=plan.notes;$('saveState').textContent=dirty?'Unsaved changes':'Plan saved';renderWeeks();renderSession();}
+function renderEditor(){$('editor').hidden=false;$('usePlan').disabled=!plan.weeks[0].sessions.length;$('planName').value=plan.name;$('planNotes').value=plan.notes;$('saveState').textContent=dirty?'Unsaved changes':'Plan saved';renderWeeks();renderSession();}
 async function save(){if(busy||!$('editor').reportValidity())return false;busy=true;$('savePlan').disabled=true;try{plan.name=$('planName').value.trim();plan.notes=$('planNotes').value;const body={name:plan.name,notes:plan.notes,weeks:plan.weeks,revision:plan.revision};const recovery=plan._recovery;plan=await api(plan.id?'/api/mesocycles/'+encodeURIComponent(plan.id):'/api/mesocycles',json(plan.id?'PUT':'POST',body));dirty=false;localStorage.removeItem(KEY);if(recovery){recovered=recovered.filter(x=>x._recovery!==recovery);localStorage.setItem(KEY+'.weeks',JSON.stringify(recovered));}await refreshPlans();renderEditor();message('Plan saved.');return true;}catch(e){message(e.message);return false;}finally{busy=false;$('savePlan').disabled=false;}}
 async function openPicker(){message('');$('exercisePicker').showModal();$('exerciseSearch').value='';try{catalog=await api('/exercises');renderExercises();$('exerciseSearch').focus();}catch(e){message(e.message);}}
 function renderExercises(){const terms=$('exerciseSearch').value.toLowerCase().trim().split(/\s+/);const box=$('exerciseResults');box.replaceChildren();const hits=catalog.filter(x=>terms.every(t=>x.title.toLowerCase().includes(t))).slice(0,100);for(const ex of hits)box.append(button(ex.title,()=>{session().exercises.push({exercise_template_id:ex.id,title:ex.title,notes:'',sets:[{reps:5,rpe:7,weight_kg:null,type:'normal',ts:false}]});$('exercisePicker').close();remember();renderSession();}));if(!hits.length)box.append(el('p','muted','No matches. Refresh the exercise list if needed.'));}
-$('newPlan').addEventListener('click',newPlan);
+$('newPlan').addEventListener('click',newPlan);$('addDay').addEventListener('click',addDay);
 $('planName').addEventListener('input',()=>{plan.name=$('planName').value;remember();});$('planNotes').addEventListener('input',()=>{plan.notes=$('planNotes').value;remember();});
 $('editor').addEventListener('submit',e=>{e.preventDefault();save();});
 $('usePlan').addEventListener('click',async()=>{if((dirty||!plan.id)&&!await save())return;try{plan=await api('/api/mesocycles/'+encodeURIComponent(plan.id)+'/activate',{method:'POST'});await refreshPlans();message('Active microcycle set. Its next workout is ready on the Log page.');}catch(e){message(e.message);}});
@@ -173,8 +175,12 @@ refreshPlans().then(()=>{try{const saved=JSON.parse(localStorage.getItem(KEY));i
   recovered=recoverLegacyEditor(saved);
   localStorage.setItem(KEY+'.weeks',JSON.stringify(recovered));plan=structuredClone(recovered[0]);wi=si=0;remember();renderLibrary();
  }else{plan=saved.plan;wi=0;si=Math.min(saved.si||0,plan.weeks[0].sessions.length-1);dirty=true;}
+ if(!localStorage.getItem(KEY+'.blankDays')){
+  const days=plan.weeks[0].sessions;
+  if(days.length===3&&days.every((s,i)=>s.name==='Day '+(i+1)&&!s.exercises.length)&&!(plan.completed||[]).length){localStorage.setItem(KEY+'.beforeBlankDays',JSON.stringify(saved));plan.weeks[0].sessions=[];remember();}
+ }
  renderEditor();message('Restored your unsaved one-week draft.');
-}}catch(e){message('Could not restore the editor draft. Saved plans are still available.');}}).catch(e=>message(e.message));
+}localStorage.setItem(KEY+'.blankDays','done');}catch(e){message('Could not restore the editor draft. Saved plans are still available.');}}).catch(e=>message(e.message));
 </script><script id="page-navigation">
   (() => {
     const back=document.getElementById("pageBack");

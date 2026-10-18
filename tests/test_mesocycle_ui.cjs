@@ -10,8 +10,14 @@ const doc={id:'plan-1',name:'Strength block',completed:[],weeks:[{name:'Week 1',
 const context=vm.createContext({structuredClone,id:()=>String(++counter)});
 for(const name of ['cloneSession','nextSession'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
 context.dirty=false;context.remember=()=>{};context.renderEditor=()=>{};
-for(const name of ['newPlan','duplicateMicrocycle','recoverLegacyEditor'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
-context.newPlan();assert.equal(context.plan.weeks.length,1);assert.equal(context.plan.weeks[0].sessions.length,3);
+context.confirm=()=>true;context.message=()=>{};
+for(const name of ['session','completed','newPlan','addDay','removeDay','duplicateMicrocycle','recoverLegacyEditor'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
+context.newPlan();assert.equal(context.plan.weeks.length,1);assert.equal(context.plan.weeks[0].sessions.length,0);
+context.addDay();context.addDay();assert.equal(context.plan.weeks[0].sessions.length,2);
+context.si=0;context.removeDay();assert.equal(context.plan.weeks[0].sessions[0].name,'Day 2');
+context.addDay();assert.equal(context.plan.weeks[0].sessions[1].name,'Day 1');
+context.removeDay();context.removeDay();assert.equal(context.plan.weeks[0].sessions.length,0);
+context.removeDay();assert.equal(context.plan.weeks[0].sessions.length,0);
 const single=structuredClone(doc);single.weeks=[single.weeks[0]];single.completed=[{session_id:'a'}];single.active=true;single.revision=3;
 context.duplicateMicrocycle(single);assert.equal(context.plan.id,undefined);assert.equal(context.plan.completed.length,0);assert.equal(context.plan.revision,0);
 assert.notEqual(context.plan.weeks[0].sessions[0].id,'a');assert.equal(single.weeks[0].sessions[0].id,'a');

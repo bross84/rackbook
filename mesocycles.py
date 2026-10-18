@@ -44,7 +44,7 @@ class PlannedSession(BaseModel):
 
 class PlannedWeek(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    sessions: list[PlannedSession] = Field(min_length=1, max_length=14)
+    sessions: list[PlannedSession] = Field(default_factory=list, max_length=14)
 
 
 class PlanInput(BaseModel):
@@ -182,8 +182,11 @@ def save_plan(data: PlanInput, plan_id=None):
 def activate(plan_id):
     with get_db() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        if _row(conn, plan_id)['archived']:
+        row = _row(conn, plan_id)
+        if row['archived']:
             raise PlanError('This microcycle is archived')
+        if not json.loads(row['document'])['weeks'][0]['sessions']:
+            raise PlanError('Add a day before using this microcycle')
         conn.execute('UPDATE mesocycles SET active = 0 WHERE active = 1')
         conn.execute('UPDATE mesocycles SET active = 1 WHERE id = ?', (plan_id,))
         return _view(conn, _row(conn, plan_id))
@@ -193,6 +196,27 @@ def archive(plan_id):
     with get_db() as conn:
         _row(conn, plan_id)
         conn.execute('UPDATE mesocycles SET archived = 1, active = 0 WHERE id = ?', (plan_id,))
+
+
+def clear_initial_day_placeholders():
+    """One-time conversion of the old three untouched default days, preserving a backup."""
+    with get_db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        key = 'microcycle_blank_days_v1'
+        if conn.execute('SELECT 1 FROM app_settings WHERE key = ?', (key,)).fetchone():
+            return
+        for row in conn.execute('SELECT * FROM mesocycles').fetchall():
+            doc = json.loads(row['document'])
+            sessions = doc['weeks'][0]['sessions']
+            done = conn.execute('SELECT 1 FROM mesocycle_completions WHERE mesocycle_id = ? LIMIT 1', (row['id'],)).fetchone()
+            if ([s['name'] for s in sessions] == ['Day 1', 'Day 2', 'Day 3']
+                    and not any(s['exercises'] for s in sessions) and not done):
+                conn.execute('INSERT INTO mesocycle_week_backups (plan_id, document, revision) VALUES (?, ?, ?) ON CONFLICT(plan_id) DO NOTHING',
+                             (row['id'], row['document'], row['revision']))
+                doc['weeks'][0]['sessions'] = []
+                conn.execute('UPDATE mesocycles SET document = ?, revision = revision + 1, active = 0 WHERE id = ?',
+                             (json.dumps(doc), row['id']))
+        conn.execute('INSERT INTO app_settings (key, value) VALUES (?, ?)', (key, 'done'))
 
 
 def validate_save(link: PlanLink, start):

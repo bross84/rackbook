@@ -40,6 +40,7 @@ from workout_view import summarize_workout
 async def lifespan(app: FastAPI):
     init_db()
     mesocycles.migrate_single_week_plans()
+    mesocycles.clear_initial_day_placeholders()
     yield
 
 

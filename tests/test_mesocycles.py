@@ -192,5 +192,32 @@ class MesocycleCase(unittest.TestCase):
             self.assertNotIn('id="addWeek"',html)
             self.assertNotIn('Copy to next week',html)
 
+    def test_blank_microcycle_can_be_saved_then_days_added_and_last_removed(self):
+        doc=document();doc['weeks'][0]['sessions']=[]
+        response=self.client.post('/api/mesocycles',json=doc)
+        self.assertEqual(200,response.status_code,response.text)
+        plan=response.json();url='/api/mesocycles/'+plan['id']
+        self.assertEqual(409,self.client.post(url+'/activate').status_code)
+        plan['weeks'][0]['sessions']=[{'id':'custom-day','name':'My day','exercises':[]}]
+        added=self.client.put(url,json=plan).json()
+        self.assertEqual('custom-day',added['weeks'][0]['sessions'][0]['id'])
+        added['weeks'][0]['sessions']=[]
+        removed=self.client.put(url,json=added)
+        self.assertEqual(200,removed.status_code)
+        self.assertEqual([],self.client.get(url).json()['weeks'][0]['sessions'])
+
+    def test_old_untouched_day_defaults_clear_once_without_removing_real_plans(self):
+        doc=document();doc['weeks'][0]['sessions']=[{'id':'d'+str(i),'name':'Day '+str(i),'exercises':[]} for i in (1,2,3)]
+        blank=self.client.post('/api/mesocycles',json=doc).json()
+        real=self.create()
+        with main.get_db() as conn:
+            conn.execute('DELETE FROM app_settings WHERE key = ?',('microcycle_blank_days_v1',))
+        mesocycles.clear_initial_day_placeholders()
+        self.assertEqual([],self.client.get('/api/mesocycles/'+blank['id']).json()['weeks'][0]['sessions'])
+        self.assertEqual(real['weeks'],self.client.get('/api/mesocycles/'+real['id']).json()['weeks'])
+        intentional=self.client.post('/api/mesocycles',json=doc).json()
+        mesocycles.clear_initial_day_placeholders()
+        self.assertEqual(3,len(self.client.get('/api/mesocycles/'+intentional['id']).json()['weeks'][0]['sessions']))
+
 
 if __name__=='__main__':unittest.main()

@@ -964,7 +964,7 @@
           start.addEventListener("click", () => { start.disabled = true; loadPlannedWorkout(plan.id, next.session.id).catch(err => say(err.message)).finally(() => { start.disabled = false; }); });
           box.append(start);
         } else box.append(el("p", "muted", "Add movements to this workout in the builder before loading it."));
-      } else box.append(el("p", "muted", "Microcycle complete. Create another plan when you are ready."));
+      } else box.append(el("p", "muted", plan.weeks[0].sessions.length ? "Microcycle complete. Create another plan when you are ready." : "No days planned yet. Add a day in the builder."));
       box.append(link);
     } catch (err) { box.replaceChildren(el("p", "muted", "Could not load planned workouts: " + err.message)); }
   }
