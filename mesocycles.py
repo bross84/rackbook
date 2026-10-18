@@ -1,5 +1,6 @@
 """Local workout plans; no Hevy calls and no legacy-program state."""
 import json
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
@@ -204,6 +205,21 @@ def archive(plan_id):
     with get_db() as conn:
         _row(conn, plan_id)
         conn.execute('UPDATE mesocycles SET archived = 1, active = 0 WHERE id = ?', (plan_id,))
+
+
+def mark_completed(plan_id, session_id):
+    """Record a day already trained elsewhere; never create a Hevy workout."""
+    with get_db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = _row(conn, plan_id)
+        if row['archived']:
+            raise PlanError('This microcycle is archived')
+        sessions = json.loads(row['document'])['weeks'][0]['sessions']
+        if not any(s['id'] == session_id for s in sessions):
+            raise PlanError('Workout day not found', 404)
+        conn.execute('INSERT INTO mesocycle_completions (mesocycle_id, session_id, hevy_workout_id, workout_start) VALUES (?, ?, ?, ?) ON CONFLICT(mesocycle_id, session_id) DO NOTHING',
+                     (plan_id, session_id, None, datetime.now(timezone.utc).isoformat()))
+        return _view(conn, row)
 
 
 def clear_initial_day_placeholders():

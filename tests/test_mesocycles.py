@@ -130,6 +130,22 @@ class MesocycleCase(unittest.TestCase):
         self.assertFalse(retained['active'])
         self.hevy.create_workout.assert_not_called()
 
+    def test_manual_prior_completion_is_local_idempotent_and_protected(self):
+        p=self.create();url='/api/mesocycles/'+p['id']+'/sessions/day-a/complete'
+        response=self.client.post(url)
+        self.assertEqual(200,response.status_code,response.text)
+        completed=response.json()['completed']
+        self.assertEqual(1,len(completed));self.assertEqual('day-a',completed[0]['session_id'])
+        self.assertIsNone(completed[0]['hevy_workout_id'])
+        self.assertEqual(completed,self.client.post(url).json()['completed'])
+        self.assertEqual(409,self.client.post('/hevy/workouts',json=self.workout(p)).status_code)
+        self.hevy.create_workout.assert_not_called()
+        self.assertEqual(404,self.client.post(url.replace('day-a','missing-day')).status_code)
+        p['weeks'][0]['sessions'][0]['name']='Renamed'
+        self.assertEqual(409,self.client.put('/api/mesocycles/'+p['id'],json=p).status_code)
+        self.client.post('/api/mesocycles/'+p['id']+'/archive')
+        self.assertEqual(409,self.client.post(url).status_code)
+
     def test_validation_and_page(self):
         for change in ('duplicate','rpe','ts'):
             doc=document();sets=doc['weeks'][0]['sessions'][0]['exercises'][0]['sets']

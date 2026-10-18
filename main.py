@@ -389,6 +389,11 @@ def update_mesocycle(plan_id: str, data: mesocycles.PlanInput):
     return _plan_call(mesocycles.save_plan, data, plan_id)
 
 
+@app.post('/api/mesocycles/{plan_id}/sessions/{session_id}/complete', response_model=mesocycles.PlanView)
+def mark_microcycle_day_completed(plan_id: str, session_id: str):
+    return _plan_call(mesocycles.mark_completed, plan_id, session_id)
+
+
 @app.post('/api/mesocycles/{plan_id}/activate', response_model=mesocycles.PlanView)
 def activate_mesocycle(plan_id: str):
     return _plan_call(mesocycles.activate, plan_id)

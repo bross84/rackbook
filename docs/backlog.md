@@ -29,6 +29,10 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Prior workout completion (2026-10-18): Mark already completed on the log's selected day records local plan progress for workouts already trained outside this plan. Confirmation is required; no Hevy workout is created or changed. Repeated marks preserve the original completion, and the selector advances to the next pending day.
+
+- Choose a workout day (2026-10-18): the log's planned-workout card has a Workout day selector, defaulting to the first pending day and allowing any other pending day (such as 1.4.2). Completed days are labelled and disabled. Starting later does not mark earlier workouts completed or modify Hevy history.
+
 - Choose microcycle from the log (2026-10-18): the planned-workout card now lists all saved microcycles, defaults to the active plan, and previews the next uncompleted workout. Load next planned workout activates the chosen microcycle and loads it directly. Empty/completed plans explain their state without a load button.
 
 - Delete microcycle (2026-10-18): each saved plan card has a Delete button with confirmation. Uses the existing archive endpoint to remove the plan from the library and deactivate it while retaining completed workout history. Deleting the currently edited plan also closes its editor and clears its local draft; other open drafts remain intact.
