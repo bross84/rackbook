@@ -49,12 +49,20 @@ class PlannedWeek(BaseModel):
 
 class PlanInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    program_name: str = Field(default='', max_length=90)
+    cycle: int = Field(default=1, ge=1, le=9999)
+    week: int = Field(default=1, ge=1, le=9999)
     notes: str = Field(default='', max_length=4000)
     weeks: list[PlannedWeek] = Field(min_length=1, max_length=1)
     revision: int = Field(default=0, ge=0)
 
     @model_validator(mode='after')
     def unique_sessions(self):
+        self.program_name = self.program_name.strip()
+        if self.program_name:
+            self.name = f'{self.program_name}{self.cycle}.{self.week}'
+            for index, session in enumerate(self.weeks[0].sessions, 1):
+                session.name = f'{self.name}.{index}'
         ids = [s.id for w in self.weeks for s in w.sessions]
         if len(ids) != len(set(ids)):
             raise ValueError('Workout identities must be unique')

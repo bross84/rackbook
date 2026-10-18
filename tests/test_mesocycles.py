@@ -192,6 +192,28 @@ class MesocycleCase(unittest.TestCase):
             self.assertNotIn('id="addWeek"',html)
             self.assertNotIn('Copy to next week',html)
 
+    def test_program_naming_persists_and_regenerates_day_names(self):
+        doc=document();doc.update(program_name='BS-Bridge',cycle=1,week=1)
+        response=self.client.post('/api/mesocycles',json=doc)
+        self.assertEqual(200,response.status_code,response.text)
+        plan=response.json();url='/api/mesocycles/'+plan['id']
+        self.assertEqual('BS-Bridge1.1',plan['name'])
+        self.assertEqual(['BS-Bridge1.1.'+str(i) for i in (1,2,3)],[s['name'] for s in plan['weeks'][0]['sessions']])
+        self.assertEqual('BS-Bridge',self.client.get(url).json()['program_name'])
+        plan.update(cycle=2,week=3)
+        updated=self.client.put(url,json=plan)
+        self.assertEqual(200,updated.status_code,updated.text)
+        self.assertEqual('BS-Bridge2.3.1',updated.json()['weeks'][0]['sessions'][0]['name'])
+        plan=updated.json();plan['week']=0
+        self.assertEqual(422,self.client.put(url,json=plan).status_code)
+
+    def test_program_naming_cannot_rename_completed_sessions(self):
+        doc=document();doc.update(program_name='BS-Bridge',cycle=1,week=1)
+        plan=self.client.post('/api/mesocycles',json=doc).json()
+        mesocycles.complete(mesocycles.PlanLink(mesocycle_id=plan['id'],session_id='day-a'),'saved-id','2026-10-18T10:00:00Z')
+        plan['week']=2
+        self.assertEqual(409,self.client.put('/api/mesocycles/'+plan['id'],json=plan).status_code)
+
     def test_blank_microcycle_can_be_saved_then_days_added_and_last_removed(self):
         doc=document();doc['weeks'][0]['sessions']=[]
         response=self.client.post('/api/mesocycles',json=doc)

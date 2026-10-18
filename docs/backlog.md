@@ -29,6 +29,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Program workout naming (2026-10-18): editable Program, Cycle and Week generate names such as BS-Bridge1.1.1, with the day number following workout order. Duplicating a microcycle increments Week and resets completion with fresh session ids. Existing custom names remain until a program is entered. Completed prescriptions retain their names; duplicate the microcycle to change its naming fields.
+
 - Blank microcycle builder (2026-10-17): new plans start with zero days, with a persistent Add day control and explicit Remove day action, including removal of the last uncompleted day. Empty plans can be saved; activation requires a day. Old untouched Day 1/2/3 placeholders are cleared once in saved plans and editor drafts, with backups; configured days and completed history are preserved.
 
 - Single-week Microcycle Builder (2026-10-17), `/microcycles` (`/mesocycles` remains compatible): a flat workout list replaces the week hierarchy. Extra-week controls are removed and the API enforces one week. Duplicate a whole microcycle to reuse its prescription. Existing saved plans are converted on startup: empty future scaffolding is dropped, populated/completed future weeks are preserved as separate microcycles, old draft/save links keep resolving, and full original documents are backed up. Unsaved multiweek editor drafts are recovered as separate one-week drafts. This corrects the earlier change that only altered the new-plan default.
