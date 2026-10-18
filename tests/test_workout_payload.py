@@ -43,16 +43,21 @@ class TestWeight(unittest.TestCase):
         for kg in (46.2500001,47.499,132.34 / 2.20462262185):
             self.assertEqual(kg,self._kg(kg))
 
-    def test_rounds_whole_weights_in_selected_unit_with_half_up(self):
+    def test_rounds_whole_pounds_with_half_up_in_lb_mode(self):
         factor=2.20462262185
-        for unit in ('lb','kg'):
-            for entered,expected in ((132.34,132),(132.49,132),(132.5,133),(132.51,133),(0,0),(2.5,3)):
-                with self.subTest(unit=unit,entered=entered):
-                    kg=entered/factor if unit=='lb' else entered
-                    entry=_entry(weight_unit=unit,exercises=[{'exercise_template_id':'t','sets':[{'weight_kg':kg,'reps':5}]}])
-                    actual=build_hevy_workout(entry)['workout']['exercises'][0]['sets'][0]['weight_kg']
-                    self.assertAlmostEqual(expected,actual*factor if unit=='lb' else actual)
-                    self.assertEqual(kg,entry['exercises'][0]['sets'][0]['weight_kg'],'Local input must retain its original value')
+        for entered,expected in ((132.34,132),(132.49,132),(132.5,133),(132.51,133),(0,0),(2.5,3)):
+            with self.subTest(entered=entered):
+                kg=entered/factor
+                entry=_entry(weight_unit='lb',exercises=[{'exercise_template_id':'t','sets':[{'weight_kg':kg,'reps':5}]}])
+                actual=build_hevy_workout(entry)['workout']['exercises'][0]['sets'][0]['weight_kg']
+                self.assertAlmostEqual(expected,actual*factor)
+                self.assertEqual(kg,entry['exercises'][0]['sets'][0]['weight_kg'],'Local input must retain its original value')
+
+    def test_kg_mode_sends_weights_unrounded(self):
+        for kg in (62.5,101.25,61.2,2.5):
+            with self.subTest(kg=kg):
+                entry=_entry(weight_unit='kg',exercises=[{'exercise_template_id':'t','sets':[{'weight_kg':kg,'reps':5}]}])
+                self.assertEqual(kg,build_hevy_workout(entry)['workout']['exercises'][0]['sets'][0]['weight_kg'])
 
     def test_unit_rounding_preserves_missing_weights(self):
         entry=_entry(weight_unit='lb',exercises=[{'exercise_template_id':'t','sets':[{'weight_kg':None,'reps':8}]}])

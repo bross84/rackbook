@@ -66,7 +66,7 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 - Pre-session soreness (2026-10-18): Squat, Bench/Press and Deadlift check-ins use None/Mild/Moderate/Severe (0–3 internally) with a separate pain/injury checkbox per pattern. No default ratings; saved in the workout draft and locally after a successful Hevy save. No Hevy metadata writes or prescription changes. Unknown remains distinct from zero; local persistence failures report a warning without inviting another workout post.
 
-- Whole-unit Hevy weights (2026-10-18): the log sends its selected kg/lb unit with the original set weights. The Hevy payload rounds to whole numbers in that unit, with .5 rounding up; lb values are rounded before conversion back to Hevy's kg format. Exact local sets and loading calculations retain their original weights.
+- Whole-unit Hevy weights (2026-10-18): the log sends its selected kg/lb unit with the original set weights. The Hevy payload rounds to whole pounds in lb mode only (.5 rounding up, before conversion back to Hevy's kg format); kg mode is sent unrounded (corrected 2026-10-18). Exact local sets and loading calculations retain their original weights.
 
 - Preserve uploaded weights (2026-10-18): removed two-decimal kg rounding from both the log's save payload and the Hevy payload builder. Pound entries retain their conversion precision on upload; planning still uses the selected movement increment.
 

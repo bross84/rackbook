@@ -59,13 +59,10 @@ def build_hevy_workout(entry: dict[str, Any]) -> dict[str, Any]:
             weight_kg = raw_set.get("weight_kg")
             if weight_kg is not None and weight_kg < 0:
                 raise ValueError(f"{name} set {number}: weight can't be negative.")
-            if weight_kg is not None and weight_unit is not None:
-                factor = LB_PER_KG if weight_unit == 'lb' else 1
-                amount = float(weight_kg) * factor
-                # A kg -> lb round trip can land one float below an exact .5.
-                if weight_unit == 'lb':
-                    amount = nextafter(amount, inf)
-                weight_kg = floor(amount + 0.5) / factor
+            if weight_kg is not None and weight_unit == 'lb':
+                # Round to whole pounds; a kg -> lb round trip can land one float below an exact .5.
+                amount = nextafter(float(weight_kg) * LB_PER_KG, inf)
+                weight_kg = floor(amount + 0.5) / LB_PER_KG
             reps = raw_set.get("reps")
             if reps is not None and reps < 0:
                 raise ValueError(f"{name} set {number}: reps can't be negative.")
