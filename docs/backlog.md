@@ -29,6 +29,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Choose microcycle from the log (2026-10-18): the planned-workout card now lists all saved microcycles, defaults to the active plan, and previews the next uncompleted workout. Load next planned workout activates the chosen microcycle and loads it directly. Empty/completed plans explain their state without a load button.
+
 - Delete microcycle (2026-10-18): each saved plan card has a Delete button with confirmation. Uses the existing archive endpoint to remove the plan from the library and deactivate it while retaining completed workout history. Deleting the currently edited plan also closes its editor and clears its local draft; other open drafts remain intact.
 
 - Builder movement picker (2026-10-18): default and search results use most recently trained order from the latest ten Hevy workouts, matching the log's recent-history source. Remaining movements sort alphabetically. Refresh list sits in a separate footer; a history failure keeps the catalog usable and explains the alphabetical fallback.

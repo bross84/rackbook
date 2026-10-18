@@ -49,6 +49,8 @@
     button { padding: 10px 14px; cursor: pointer; }
     button.primary { background: var(--accent); color: #fff; border-color: transparent; font-weight: 500; }
     button.wide { width: 100%; }
+    #plannedStart label {display:grid;gap:6px;margin:12px 0;font-size:13px;color:var(--muted)}
+    #plannedStart select {width:100%;min-width:0}
     button.link { border: none; background: none; color: var(--muted); min-height: 36px; padding: 6px 4px; font-size: 14px; }
     button:disabled { opacity: .55; }
     input[type=text] { width: 100%; padding: 8px 10px; background: var(--bg); }
@@ -949,23 +951,39 @@
     const box = $("plannedStart");
     box.hidden = false; box.replaceChildren(el("p", "muted", "Loading planned workout…"));
     try {
-      const plans = await api("/api/mesocycles"), plan = plans.find(p => p.active);
+      const plans = await api("/api/mesocycles");
       box.replaceChildren();
       const link = el("a", null, "Open microcycle builder"); link.href = "/microcycles";
-      if (!plan) { box.append(el("h2", null, "Plan ahead"), el("p", "muted", "Build a microcycle and load your next workout here."), link); return; }
-      const done = new Set(plan.completed.map(c => c.session_id));
-      let next = null;
-      for (const week of plan.weeks) for (const session of week.sessions) if (!next && !done.has(session.id)) next = { week, session };
-      box.append(el("h2", null, plan.name));
-      if (next) {
-        box.append(el("p", "muted", next.session.name));
-        if (next.session.exercises.length) {
-          const start = el("button", "primary wide", "Load next planned workout"); start.type = "button";
-          start.addEventListener("click", () => { start.disabled = true; loadPlannedWorkout(plan.id, next.session.id).catch(err => say(err.message)).finally(() => { start.disabled = false; }); });
-          box.append(start);
-        } else box.append(el("p", "muted", "Add movements to this workout in the builder before loading it."));
-      } else box.append(el("p", "muted", plan.weeks[0].sessions.length ? "Microcycle complete. Create another plan when you are ready." : "No days planned yet. Add a day in the builder."));
-      box.append(link);
+      box.append(el("h2", null, "Planned workout"));
+      if (!plans.length) { box.append(el("p", "muted", "Build a microcycle and load your next workout here."), link); return; }
+      const label = el("label", null, "Microcycle"), select = el("select", "wide");
+      select.setAttribute("aria-label", "Select microcycle");
+      for (const plan of plans) { const option = el("option", null, plan.name + (plan.active ? " · Active" : "")); option.value = plan.id; select.append(option); }
+      select.value = (plans.find(p => p.active) || plans[0]).id;
+      label.append(select); const details = el("div"); box.append(label, details, link);
+      function showSelectedPlan() {
+        const plan = plans.find(p => p.id === select.value); details.replaceChildren();
+        if (!plan) return;
+        const done = new Set(plan.completed.map(c => c.session_id));
+        let next = null;
+        for (const week of plan.weeks) for (const session of week.sessions) if (!next && !done.has(session.id)) next = session;
+        if (next) {
+          details.append(el("p", "muted", "Next: " + next.name));
+          if (next.exercises.length) {
+            const start = el("button", "primary wide", "Load next planned workout"); start.type = "button";
+            start.addEventListener("click", async () => {
+              start.disabled = true; select.disabled = true;
+              try {
+                if (!plan.active) { await api("/api/mesocycles/" + encodeURIComponent(plan.id) + "/activate", { method: "POST" }); plans.forEach(p => { p.active = p.id === plan.id; }); for (const option of select.children) { const p = plans.find(p => p.id === option.value); option.textContent = p.name + (p.active ? " · Active" : ""); } }
+                await loadPlannedWorkout(plan.id, next.id);
+              } catch (err) { say(err.message); }
+              finally { start.disabled = false; select.disabled = false; }
+            });
+            details.append(start);
+          } else details.append(el("p", "muted", "Add movements to this workout in the builder before loading it."));
+        } else details.append(el("p", "muted", plan.weeks[0].sessions.length ? "Microcycle complete. Select another plan or build the next week." : "No days planned yet. Add a day in the builder."));
+      }
+      select.addEventListener("change", showSelectedPlan); showSelectedPlan();
     } catch (err) { box.replaceChildren(el("p", "muted", "Could not load planned workouts: " + err.message)); }
   }
 
