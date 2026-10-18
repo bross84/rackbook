@@ -29,6 +29,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Undo prior completion (2026-10-18): manually completed days remain selectable in the log and offer Undo completion, including when the entire microcycle is complete. This reopens the day without touching Hevy. Saved-workout completions remain protected, and retries are safe.
+
 - Prior workout completion (2026-10-18): Mark already completed on the log's selected day records local plan progress for workouts already trained outside this plan. Confirmation is required; no Hevy workout is created or changed. Repeated marks preserve the original completion, and the selector advances to the next pending day.
 
 - Choose a workout day (2026-10-18): the log's planned-workout card has a Workout day selector, defaulting to the first pending day and allowing any other pending day (such as 1.4.2). Completed days are labelled and disabled. Starting later does not mark earlier workouts completed or modify Hevy history.

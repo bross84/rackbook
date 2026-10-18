@@ -146,6 +146,22 @@ class MesocycleCase(unittest.TestCase):
         self.client.post('/api/mesocycles/'+p['id']+'/archive')
         self.assertEqual(409,self.client.post(url).status_code)
 
+    def test_undo_prior_completion_preserves_saved_workouts(self):
+        p=self.create();base='/api/mesocycles/'+p['id']+'/sessions/'
+        self.client.post(base+'day-a/complete')
+        response=self.client.delete(base+'day-a/complete')
+        self.assertEqual(200,response.status_code,response.text)
+        self.assertEqual([],response.json()['completed'])
+        self.assertEqual(200,self.client.delete(base+'day-a/complete').status_code)
+        mesocycles.complete(mesocycles.PlanLink(mesocycle_id=p['id'],session_id='day-b'),'saved-hevy','start')
+        self.assertEqual(409,self.client.delete(base+'day-b/complete').status_code)
+        kept=self.client.get('/api/mesocycles/'+p['id']).json()['completed']
+        self.assertEqual('saved-hevy',kept[0]['hevy_workout_id'])
+        self.assertEqual(404,self.client.delete(base+'missing/complete').status_code)
+        self.client.post('/api/mesocycles/'+p['id']+'/archive')
+        self.assertEqual(409,self.client.delete(base+'day-a/complete').status_code)
+        self.hevy.create_workout.assert_not_called()
+
     def test_validation_and_page(self):
         for change in ('duplicate','rpe','ts'):
             doc=document();sets=doc['weeks'][0]['sessions'][0]['exercises'][0]['sets']

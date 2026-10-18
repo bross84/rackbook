@@ -222,6 +222,22 @@ def mark_completed(plan_id, session_id):
         return _view(conn, row)
 
 
+def undo_manual_completion(plan_id, session_id):
+    """Remove only a local prior-training mark, preserving saved workout links."""
+    with get_db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = _row(conn, plan_id)
+        if row['archived']:
+            raise PlanError('This microcycle is archived')
+        if not any(s['id'] == session_id for s in json.loads(row['document'])['weeks'][0]['sessions']):
+            raise PlanError('Workout day not found', 404)
+        completion = conn.execute('SELECT hevy_workout_id FROM mesocycle_completions WHERE mesocycle_id = ? AND session_id = ?', (plan_id, session_id)).fetchone()
+        if completion and completion['hevy_workout_id'] is not None:
+            raise PlanError('Only manually marked completion can be undone. Saved workouts retain their history.')
+        conn.execute('DELETE FROM mesocycle_completions WHERE mesocycle_id = ? AND session_id = ? AND hevy_workout_id IS NULL', (plan_id, session_id))
+        return _view(conn, row)
+
+
 def clear_initial_day_placeholders():
     """One-time conversion of the old three untouched default days, preserving a backup."""
     with get_db() as conn:

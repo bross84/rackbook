@@ -966,24 +966,38 @@
         const plan = plans.find(p => p.id === select.value); details.replaceChildren();
         if (!plan) return;
         const done = new Set(plan.completed.map(c => c.session_id));
+        const manual = new Set(plan.completed.filter(c => c.hevy_workout_id === null).map(c => c.session_id));
         const sessions = plan.weeks.flatMap(week => week.sessions);
         const pending = sessions.filter(session => !done.has(session.id));
         if (!pending.length) {
           details.append(el("p", "muted", sessions.length ? "Microcycle complete. Select another plan or build the next week." : "No days planned yet. Add a day in the builder."));
-          return;
+          if (!manual.size) return;
         }
         const dayLabel = el("label", null, "Workout day"), daySelect = el("select", "wide");
         daySelect.setAttribute("aria-label", "Select workout day");
         for (const session of sessions) {
-          const option = el("option", null, session.name + (done.has(session.id) ? " · Completed" : ""));
-          option.value = session.id; option.disabled = done.has(session.id); daySelect.append(option);
+          const option = el("option", null, session.name + (manual.has(session.id) ? " · Completed manually" : done.has(session.id) ? " · Completed" : ""));
+          option.value = session.id; option.disabled = done.has(session.id) && !manual.has(session.id); daySelect.append(option);
         }
-        daySelect.value = pending[0].id;
+        daySelect.value = (pending[0] || sessions.find(s => manual.has(s.id))).id;
         dayLabel.append(daySelect); const workoutDetails = el("div"); details.append(dayLabel, workoutDetails);
         function showSelectedDay() {
           workoutDetails.replaceChildren();
-          const selected = pending.find(session => session.id === daySelect.value);
+          const selected = sessions.find(session => session.id === daySelect.value);
           if (!selected) return;
+          if (done.has(selected.id)) {
+            if (!manual.has(selected.id)) return;
+            const undo = el("button", "wide", "Undo completion"); undo.type = "button";
+            undo.addEventListener("click", async () => {
+              undo.disabled = true; select.disabled = true; daySelect.disabled = true;
+              try {
+                const updated = await api("/api/mesocycles/" + encodeURIComponent(plan.id) + "/sessions/" + encodeURIComponent(selected.id) + "/complete", { method: "DELETE" });
+                Object.assign(plan, updated); showSelectedPlan();
+              } catch (err) { say(err.message); }
+              finally { undo.disabled = false; select.disabled = false; daySelect.disabled = false; }
+            });
+            workoutDetails.append(el("p", "muted", "This day was marked completed manually."), undo); return;
+          }
           const mark = el("button", "wide", "Mark already completed"); mark.type = "button";
           mark.addEventListener("click", async () => {
             if (!confirm("Mark " + selected.name + " as already completed? This only updates Rackbook's plan progress; it does not create or change a Hevy workout.")) return;

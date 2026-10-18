@@ -394,6 +394,11 @@ def mark_microcycle_day_completed(plan_id: str, session_id: str):
     return _plan_call(mesocycles.mark_completed, plan_id, session_id)
 
 
+@app.delete('/api/mesocycles/{plan_id}/sessions/{session_id}/complete', response_model=mesocycles.PlanView)
+def undo_microcycle_day_completion(plan_id: str, session_id: str):
+    return _plan_call(mesocycles.undo_manual_completion, plan_id, session_id)
+
+
 @app.post('/api/mesocycles/{plan_id}/activate', response_model=mesocycles.PlanView)
 def activate_mesocycle(plan_id: str):
     return _plan_call(mesocycles.activate, plan_id)

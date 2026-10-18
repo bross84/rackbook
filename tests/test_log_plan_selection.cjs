@@ -10,7 +10,7 @@ const plans=[{id:'first',name:'Week 1',active:false,completed:[{session_id:'done
 const box=node('section'),calls=[],loads=[],errors=[];
 let data=plans,fail=false;
 let allowMark=false;
-const context=vm.createContext({$:()=>box,el:node,confirm:()=>allowMark,api:async(url,options)=>{calls.push({url,options});if(options&&fail)throw Error('Activation failed');if(url.endsWith('/complete')){const p=data.find(p=>p.id==='first');p.completed.push({session_id:'done'});return structuredClone(p);}return structuredClone(data);},loadPlannedWorkout:async(...args)=>loads.push(args),say:text=>errors.push(text)});
+const context=vm.createContext({$:()=>box,el:node,confirm:()=>allowMark,api:async(url,options)=>{calls.push({url,options});if(options&&fail)throw Error('Activation failed');if(url.endsWith('/complete')){const p=data.find(p=>p.id==='first');if(options.method==='DELETE')p.completed=p.completed.filter(c=>c.session_id!=='done');else p.completed.push({session_id:'done',hevy_workout_id:null});return structuredClone(p);}return structuredClone(data);},loadPlannedWorkout:async(...args)=>loads.push(args),say:text=>errors.push(text)});
 vm.runInContext(source,context);
 (async()=>{
  await context.loadPlannedStart();const select=find(box,'select')[0];assert.equal(select.value,'second');
@@ -32,8 +32,16 @@ vm.runInContext(source,context);
  const mark=find(box,'button')[0],beforeMark=calls.length;await mark.events.click();assert.equal(calls.length,beforeMark,'Cancelling must not mark completion');
  allowMark=true;await mark.events.click();assert.equal(calls.at(-1).url,'/api/mesocycles/first/sessions/done/complete');
  assert.equal(find(box,'select')[1].value,'next','Recording day 1 completion must advance the default to day 2');
- assert.equal(find(box,'select')[1].children[0].disabled,true);
+ assert.equal(find(box,'select')[1].children[0].disabled,false,'Manually completed days remain selectable to undo');
  const later=find(box,'select')[1];later.value='next';later.events.change();assert.equal(find(box,'button').length,2,'A movement-free earlier day must not prevent selecting a later workout');
+ later.value='done';later.events.change();assert.equal(find(box,'button')[0].textContent,'Undo completion');
+ fail=true;await find(box,'button')[0].events.click();assert.equal(data[0].completed.length,1,'Failed undo must retain completion');
+ fail=false;await find(box,'button')[0].events.click();assert.equal(calls.at(-1).options.method,'DELETE');
+ assert.equal(find(box,'select')[1].value,'done');assert.equal(data[0].completed.length,0);
+ data[0].completed=[{session_id:'done',hevy_workout_id:null},{session_id:'next',hevy_workout_id:'saved'}];await context.loadPlannedStart();
+ assert.equal(find(box,'select')[1].value,'done','Undo must remain available even when every day is complete');
+ assert.equal(find(box,'select')[1].children[1].disabled,true,'Saved completions stay protected');
+ assert.equal(find(box,'button')[0].textContent,'Undo completion');
  data=[];await context.loadPlannedStart();assert.equal(find(box,'select').length,0);assert.equal(find(box,'a')[0].href,'/microcycles');
  console.log('Log microcycle selection, active default, next pending day, activation, failures and empty states passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
