@@ -397,7 +397,7 @@
       <input id="title" type="text" aria-label="Workout title" autocomplete="off" />
       <p id="clock" class="muted" style="margin:6px 0 0"></p>
       <p class="hint">Before ✓ the RPE plans the weight. Tap ✓ right after the set: the RPE you set then is the one you logged, and the weight stays.</p>
-      <div id="sessionSoreness"></div>
+      <div id="sessionSoreness" hidden></div>
       <div id="plannedOrigin" class="hint" hidden></div>
     </div>
     <div id="exercises"></div>
@@ -1092,11 +1092,17 @@
   }
 
   // ── Workout screen ──────────────────────────────────────────────────────────
-  function renderSoreness() {
-    const box = $("sessionSoreness"); box.replaceChildren();
-    box.append(el("h3", null, "Soreness before this session"));
-    box.append(el("p", "hint", "Rate each movement pattern before training. Leave unanswered if unsure. Tap the selected level to clear it; flag pain or injury separately."));
-    for (const [key, title] of [["squat", "Squat"], ["bench_press", "Bench/Press"], ["deadlift", "Deadlift"]]) {
+  let sorenessPatterns = null;
+  function renderSoreness(ex, box) {
+    box.replaceChildren();
+    if (!sorenessPatterns) {
+      box.append(el("p", "hint", "Soreness controls unavailable. Reload to retry.")); return;
+    }
+    const key = sorenessPatterns[ex.title];
+    if (!key) return;
+    const title = {squat: "Squat", bench_press: "Bench/Press", deadlift: "Deadlift"}[key];
+    box.append(el("p", "hint", "Soreness before this movement · " + title + ". Leave unanswered if unsure."));
+    {
       const group = el("fieldset");
       group.style.cssText = "border:0;padding:0;margin:12px 0";
       group.append(el("legend", null, title));
@@ -1113,7 +1119,11 @@
           draft.soreness ||= {};
           draft.soreness[key] ||= { level: null, pain: false };
           draft.soreness[key].level = selected ? null : value;
-          saveDraft(); renderSoreness();
+          saveDraft();
+          for (const movement of draft.exercises) {
+            const target = cardEls.get(movement.id)?.querySelector(".movement-soreness");
+            if (target) renderSoreness(movement, target);
+          }
         });
         row.append(button);
       }
@@ -1127,6 +1137,10 @@
         draft.soreness[key] ||= { level: null, pain: false };
         draft.soreness[key].pain = pain.checked;
         saveDraft();
+        for (const movement of draft.exercises) {
+          const target = cardEls.get(movement.id)?.querySelector(".movement-soreness");
+          if (target) renderSoreness(movement, target);
+        }
       });
       painLabel.append(pain, el("span", null, "Pain or injury"));
       group.append(row, painLabel); box.append(group);
@@ -1138,7 +1152,6 @@
     const stay = !$("workout").hidden, y = window.scrollY;   // redrawing the workout you are already on keeps your place
     show("workout");
     $("title").value = draft.title;
-    renderSoreness();
     const origin = $("plannedOrigin"); origin.hidden = !draft.planned_session; origin.replaceChildren();
     if (draft.planned_session) {
       origin.append(el("span", null, draft.planLabel || "Planned workout"));
@@ -1445,6 +1458,11 @@
     saveDraft(); renderWorkout();
   }
 
+  function exerciseComplete(ex) {
+    const work = ex.sets.filter(s => s.type !== "warmup");
+    return work.length > 0 && work.every(s => s.done);
+  }
+
   function renderExercise(ex) {
     const card = el("section", "card");
     const head = el("div", "exhead"), left = el("div", "exleft"), right = el("div", "exright");   // side by side on a wide screen, stacked otherwise
@@ -1483,7 +1501,21 @@
       if (!confirm("Remove " + ex.title + " from this workout?")) return;
       draft.exercises = draft.exercises.filter((e) => e.id !== ex.id); saveDraft(); renderWorkout();
     }));
-    head.append(chip, rest, more);
+    const toggle = el("button", "chip");
+    toggle.type = "button";
+    const complete = el("span", "hint");
+    const updateCollapse = () => {
+      left.hidden = right.hidden = Boolean(ex.collapsed);
+      chip.hidden = rest.hidden = more.hidden = Boolean(ex.collapsed);
+      toggle.textContent = ex.collapsed ? "Reopen" : "Collapse";
+      toggle.setAttribute("aria-expanded", String(!ex.collapsed));
+      toggle.setAttribute("aria-label", (ex.collapsed ? "Reopen " : "Collapse ") + ex.title);
+      complete.textContent = exerciseComplete(ex) ? "Completed ✓" : "";
+    };
+    toggle.addEventListener("click", () => { ex.collapsed = !ex.collapsed; closeNumberPad(); updateCollapse(); saveDraft(); });
+    head.append(chip, rest, more, complete, toggle);
+    const checkin = el("div", "movement-soreness");
+    renderSoreness(ex, checkin); left.append(checkin);
     left.append(renderRefBar(ex));
     const stressBox = el("section", "stress");
     stressBox.setAttribute("aria-label", "Stress for " + ex.title);
@@ -1547,6 +1579,10 @@
       tick.addEventListener("click", () => {
         if (!rpe.reportValidity()) return;
         s.done = !s.done;
+        if (s.done && s.type !== "warmup" && exerciseComplete(ex)) {
+          ex.collapsed = true; closeNumberPad();
+        } else if (!s.done) ex.collapsed = false;
+        updateCollapse();
         if (s.done && !s.arpe) s.arpe = s.rpe;   // from here the RPE box is the RPE you logged
         row.classList.toggle("done", s.done);
         showRpe(rpe, s.done ? (s.arpe || s.rpe) : s.rpe);
@@ -1581,6 +1617,7 @@
     add.addEventListener("click", () => {
       const prev = ex.sets[ex.sets.length - 1];
       const next = { type: "normal", kg: prev ? prev.kg : "", reps: prev ? prev.reps : "", rpe: prev ? prev.rpe : "", done: false, manual: false };
+      ex.collapsed = false;
       ex.sets.push(next);
       applyAuto(ex, next);
       saveDraft(); renderWorkout();
@@ -1591,6 +1628,7 @@
     setbar.append(warmBtn, add);
     right.append(setbar);
     right.append(renderLoader(ex));
+    updateCollapse();
     return card;
   }
 
@@ -1975,7 +2013,7 @@
   });
 
   // ── Boot ────────────────────────────────────────────────────────────────────
-  loadReference().then(() => {
+  Promise.all([loadReference(), api("/soreness/patterns").then(value => { sorenessPatterns = value; }).catch(() => {})]).then(() => {
     draft = loadDraft();
     if (draft && Array.isArray(draft.exercises)) {
       for (const ex of draft.exercises) {

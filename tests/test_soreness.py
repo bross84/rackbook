@@ -76,3 +76,55 @@ class SorenessCase(unittest.TestCase):
             rows = conn.execute("SELECT * FROM session_soreness").fetchall()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["squat"], 0)
+
+    def test_edit_preserves_other_patterns_and_never_calls_hevy(self):
+        main.soreness.record("mock-workout", self.entry["start_time"], self.entry["soreness"])
+        with patch("main._call_hevy") as hevy:
+            response = self.client.patch("/workout-soreness/mock-workout", json={"deadlift": {"level": 1, "pain": False}})
+            self.assertEqual(response.status_code, 200)
+            ratings = self.client.get("/workout-soreness/mock-workout").json()
+        hevy.assert_not_called()
+        self.assertEqual(ratings["squat"]["level"], 0)
+        self.assertEqual(ratings["bench_press"], {"level": 2, "pain": False})
+        self.assertEqual(ratings["deadlift"], {"level": 1, "pain": False})
+        self.client.patch("/workout-soreness/mock-workout", json={"deadlift": None})
+        self.assertEqual(self.client.get("/workout-soreness/mock-workout").json()["deadlift"], {"level": None, "pain": False})
+
+    def test_add_forgotten_rating_to_unrated_saved_workout(self):
+        self.entry["soreness"] = None
+        with patch("main._call_hevy", return_value={"id": "mock-workout"}):
+            self.client.post("/hevy/workouts", json=self.entry)
+        with closing(get_db()) as conn:
+            before = [dict(row) for row in conn.execute("SELECT * FROM logged_sets")]
+        with patch("main._call_hevy") as hevy:
+            response = self.client.patch("/workout-soreness/mock-workout", json={"deadlift": {"level": 0}})
+        hevy.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["deadlift"]["level"], 0)
+        self.assertIsNone(response.json()["squat"]["level"])
+        with closing(get_db()) as conn:
+            self.assertEqual([dict(row) for row in conn.execute("SELECT * FROM logged_sets")], before)
+            self.assertEqual(conn.execute("SELECT workout_start FROM session_soreness").fetchone()[0], self.entry["start_time"])
+
+    def test_edit_rejects_unknown_workout_and_invalid_rating(self):
+        with patch("main._call_hevy") as hevy:
+            self.assertEqual(self.client.get("/workout-soreness/missing").status_code, 404)
+            self.assertEqual(self.client.patch("/workout-soreness/missing", json={"squat": {"level": 1}}).status_code, 404)
+            self.assertEqual(self.client.patch("/workout-soreness/missing", json={"squat": {"level": 4}}).status_code, 422)
+        hevy.assert_not_called()
+
+    def test_pattern_titles_match_fatigue_mapping(self):
+        patterns = self.client.get("/soreness/patterns").json()
+        self.assertEqual(patterns[main.progress.LIFT_TITLES["deadlift"]], "deadlift")
+        self.assertEqual(patterns[main.progress.LIFT_TITLES["press"]], "bench_press")
+
+    def test_recent_exposes_editor_only_for_locally_recorded_workouts(self):
+        main.soreness.record("mock-workout", self.entry["start_time"], self.entry["soreness"])
+        history = {"page": 1, "page_count": 1, "workouts": [
+            {"id": "mock-workout", "title": "Local", "exercises": []},
+            {"id": "older-hevy-only", "title": "Older", "exercises": []},
+        ]}
+        with patch("main._call_hevy", return_value=history):
+            response = self.client.get("/hevy/workouts")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([w["soreness_editable"] for w in response.json()["workouts"]], [True, False])

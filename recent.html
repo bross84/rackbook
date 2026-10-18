@@ -61,6 +61,13 @@
     .note { font-size: 14px; color: var(--muted); }
     .error { background: var(--danger-bg); color: var(--danger); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; }
     .empty { text-align: center; color: var(--muted); padding: 32px 0; }
+    [hidden] { display: none !important; }
+    .soreness-editor { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+    .soreness-levels { display: flex; flex-wrap: wrap; gap: 6px; }
+    .soreness-levels button { width: auto; flex: 1; padding: 8px; font-size: 14px; }
+    .soreness-levels button[aria-pressed="true"] { background: var(--accent-soft); outline: 2px solid var(--accent); }
+    .soreness-editor fieldset { border: 0; padding: 0; margin: 12px 0; }
+    .pain-label { display: flex; gap: 8px; align-items: center; min-height: 44px; }
     /* Wide screens (a tablet on its side): use the width, two workouts side by side. */
     @media (min-width: 900px) {
       main { max-width: 1000px; }
@@ -233,7 +240,69 @@
       box.append(list);
       card.append(box);
     }
+    if (w.soreness_editable) {
+      const edit = el("button", null, "Edit soreness"); edit.type = "button";
+      const editor = el("div", "soreness-editor"); editor.hidden = true;
+      edit.addEventListener("click", () => openSorenessEditor(w, editor, edit));
+      card.append(edit, editor);
+    }
     return card;
+  }
+
+  async function sorenessRequest(id, options) {
+    const res = await fetch("/workout-soreness/" + encodeURIComponent(id), options);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Couldn't save soreness.");
+    return data;
+  }
+
+  async function openSorenessEditor(w, box, edit) {
+    edit.disabled = true; box.hidden = false;
+    box.replaceChildren(el("p", "note", "Loading check-ins…"));
+    try {
+      const ratings = await sorenessRequest(w.id);
+      const changes = {};
+      const message = el("p", "note");
+      const draw = () => {
+        box.replaceChildren(el("p", "note", "Soreness before this workout. These check-ins are saved in Rackbook."));
+        for (const [key, title] of [["squat", "Squat"], ["bench_press", "Bench/Press"], ["deadlift", "Deadlift"]]) {
+          const rating = ratings[key] || (ratings[key] = {level: null, pain: false});
+          const group = el("fieldset"), row = el("div", "soreness-levels");
+          group.append(el("legend", null, title));
+          for (const [level, label] of ["None", "Mild", "Moderate", "Severe"].entries()) {
+            const button = el("button", null, label); button.type = "button";
+            button.setAttribute("aria-pressed", String(rating.level === level));
+            button.setAttribute("aria-label", title + " soreness: " + label);
+            button.addEventListener("click", () => {
+              rating.level = rating.level === level ? null : level;
+              changes[key] = rating; message.textContent = ""; draw();
+            });
+            row.append(button);
+          }
+          const label = el("label", "pain-label"), pain = el("input"); pain.type = "checkbox"; pain.checked = rating.pain;
+          pain.addEventListener("change", () => { rating.pain = pain.checked; changes[key] = rating; message.textContent = ""; });
+          label.append(pain, el("span", null, "Pain or injury"));
+          group.append(row, label); box.append(group);
+        }
+        const save = el("button", "primary", "Save soreness"), cancel = el("button", null, "Cancel");
+        save.type = cancel.type = "button";
+        save.addEventListener("click", async () => {
+          save.disabled = cancel.disabled = true;
+          // Freeze the editor while the request is in flight so no changes get lost.
+          for (const input of box.querySelectorAll("input, button")) input.disabled = true;
+          try {
+            await sorenessRequest(w.id, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify(changes)});
+            box.replaceChildren(el("p", "note", "Soreness saved.")); edit.disabled = false;
+          } catch (err) {
+            message.textContent = err.message;
+            for (const input of box.querySelectorAll("input, button")) input.disabled = false;
+          }
+        });
+        cancel.addEventListener("click", () => { box.hidden = true; box.replaceChildren(); edit.disabled = false; });
+        message.setAttribute("role", "status"); box.append(message, save, cancel);
+      };
+      draw();
+    } catch (err) { box.replaceChildren(el("p", "error", err.message)); edit.disabled = false; }
   }
 
   function showError(message) {

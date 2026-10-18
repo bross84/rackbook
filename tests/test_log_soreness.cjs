@@ -2,37 +2,39 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'log.html'), 'utf8');
+for (const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 function element(tag, cls, text) {
   return {tag, text, style:{}, children:[], attrs:{}, append(...items) {this.children.push(...items);},
-    replaceChildren() {this.children=[];}, setAttribute(k,v) {this.attrs[k]=v;},
+    replaceChildren(...items) {this.children=items;}, setAttribute(k,v) {this.attrs[k]=v;},
     addEventListener(event, fn) {this[event]=fn;}};
 }
-const box = element('div');
+const squat={id:'sq',title:'Squat'}, bench={id:'bp',title:'Bench'}, press={id:'ohp',title:'Press'}, dead={id:'dl',title:'Deadlift'};
+const boxes = new Map([squat,bench,press,dead].map(ex=>[ex.id,element('div')]));
 let saves=0;
-const context = vm.createContext({draft:{}, $:()=>box, el:element, saveDraft:()=>saves++});
-vm.runInContext(html.slice(html.indexOf('  function renderSoreness()'), html.indexOf('  function renderWorkout()')), context);
-context.renderSoreness();
-const groups = () => box.children.slice(2);
-const buttons = i => groups()[i].children[1].children;
-const pain = i => groups()[i].children[2].children[0];
-assert.equal(groups().length,3);
-assert.deepEqual(buttons(0).map(b=>b.text), ['None','Mild','Moderate','Severe']);
-assert.ok(groups().every((_, i)=>buttons(i).every(b=>b.attrs['aria-pressed']==='false')));
-buttons(0)[0].click();
+const context = vm.createContext({draft:{exercises:[squat,bench,press,dead]}, el:element, saveDraft:()=>saves++,
+  cardEls:new Map([...boxes].map(([id,box])=>[id,{querySelector:()=>box}]))});
+vm.runInContext(html.slice(html.indexOf('  let sorenessPatterns ='), html.indexOf('  function renderWorkout()')), context);
+vm.runInContext('sorenessPatterns = {Squat:"squat",Bench:"bench_press",Press:"bench_press",Deadlift:"deadlift"}',context);
+for(const ex of [squat,bench,press,dead]) context.renderSoreness(ex,boxes.get(ex.id));
+const group=id=>boxes.get(id).children[1];
+const buttons=id=>group(id).children[1].children;
+const pain=id=>group(id).children[2].children[0];
+assert.deepEqual(buttons('sq').map(b=>b.text), ['None','Mild','Moderate','Severe']);
+assert.ok(buttons('sq').every(b=>b.attrs['aria-pressed']==='false'));
+buttons('sq')[0].click();
 assert.equal(context.draft.soreness.squat.level,0);
-assert.equal(buttons(0)[0].attrs['aria-pressed'],'true');
-buttons(1)[2].click();
-assert.equal(context.draft.soreness.bench_press.level,2);
-pain(1).checked=true; pain(1).change();
+assert.equal(buttons('sq')[0].attrs['aria-pressed'],'true');
+buttons('bp')[2].click();
+assert.equal(buttons('ohp')[2].attrs['aria-pressed'],'true','Bench and press share one observation');
+pain('bp').checked=true; pain('bp').change();
 assert.equal(context.draft.soreness.bench_press.pain,true);
 assert.equal(context.draft.soreness.bench_press.level,2);
-context.renderSoreness();
-assert.equal(pain(1).checked,true);
-assert.equal(buttons(0)[0].attrs['aria-pressed'],'true');
-buttons(0)[0].click();
+buttons('sq')[0].click();
 assert.equal(context.draft.soreness.squat.level,null);
-pain(2).checked=true; pain(2).change();
+pain('dl').checked=true; pain('dl').change();
 assert.equal(context.draft.soreness.deadlift.level,null);
 assert.equal(context.draft.soreness.deadlift.pain,true);
+const unmapped=element('div'); context.renderSoreness({title:'Unknown variant'},unmapped);
+assert.equal(unmapped.children.length,0,'Do not guess soreness mappings');
 assert.equal(saves,5);
 console.log('Soreness controls passed');

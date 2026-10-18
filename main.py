@@ -113,6 +113,7 @@ class WorkoutView(BaseModel):
     working_sets: int
     volume_kg: float
     exercises: list[ExerciseView]
+    soreness_editable: bool = False
 
 
 class WorkoutsPage(BaseModel):
@@ -163,7 +164,7 @@ def list_hevy_workouts(
     return {
         "page": int(data.get("page", page)),
         "page_count": int(data.get("page_count", 1)),
-        "workouts": [summarize_workout(w) for w in data.get("workouts", [])],
+        "workouts": [{**summarize_workout(w), "soreness_editable": soreness.editable(w["id"])} for w in data.get("workouts", [])],
     }
 
 
@@ -193,6 +194,27 @@ class SessionSoreness(BaseModel):
     squat: PatternSoreness | None = None
     bench_press: PatternSoreness | None = None
     deadlift: PatternSoreness | None = None
+
+
+@app.get("/soreness/patterns", response_model=dict[str, str])
+def soreness_patterns():
+    return soreness.patterns()
+
+
+@app.get("/workout-soreness/{workout_id}", response_model=SessionSoreness)
+def get_workout_soreness(workout_id: str):
+    try:
+        return soreness.read(workout_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+
+@app.patch("/workout-soreness/{workout_id}", response_model=SessionSoreness)
+def edit_workout_soreness(workout_id: str, ratings: SessionSoreness):
+    try:
+        return soreness.update(workout_id, ratings.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
 
 
 class WorkoutEntry(BaseModel):
