@@ -29,6 +29,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Delete microcycle (2026-10-18): each saved plan card has a Delete button with confirmation. Uses the existing archive endpoint to remove the plan from the library and deactivate it while retaining completed workout history. Deleting the currently edited plan also closes its editor and clears its local draft; other open drafts remain intact.
+
 - Builder movement picker (2026-10-18): default and search results use most recently trained order from the latest ten Hevy workouts, matching the log's recent-history source. Remaining movements sort alphabetically. Refresh list sits in a separate footer; a history failure keeps the catalog usable and explains the alphabetical fallback.
 
 - Incomplete naming previews (2026-10-18): blank or invalid Cycle/Week values show `?` in generated names instead of `null`. Blank inputs remain blank through redraws and draft restoration; required numeric validation still blocks saving until corrected.

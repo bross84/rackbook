@@ -127,6 +127,8 @@ class MesocycleCase(unittest.TestCase):
         self.assertEqual([],self.client.get('/api/mesocycles').json())
         retained=self.client.get('/api/mesocycles/'+p['id']).json()
         self.assertTrue(retained['archived']);self.assertEqual(1,len(retained['completed']))
+        self.assertFalse(retained['active'])
+        self.hevy.create_workout.assert_not_called()
 
     def test_validation_and_page(self):
         for change in ('duplicate','rpe','ts'):

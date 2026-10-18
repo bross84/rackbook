@@ -74,6 +74,21 @@ const logContext=vm.createContext({
 vm.runInContext(log.slice(log.indexOf('  async function loadPlannedWorkout('),log.indexOf('  async function loadPlannedQuery(')),logContext);
 vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  $("finish").addEventListener')),logContext);
 (async()=>{
+ let deletionCalls=[],cleared=0,allowDelete=false,failDelete=false;const editorState={hidden:false};
+ const deletionContext=vm.createContext({busy:false,dirty:true,plan:{id:'p'},plans:[{id:'p'},{id:'other'}],KEY:'draft',
+  confirm:()=>allowDelete,$:()=>editorState,localStorage:{removeItem:()=>cleared++},renderLibrary(){},message(){},
+  api:async(url,options)=>{deletionCalls.push({url,options});if(failDelete)throw Error('Failed');}});
+ vm.runInContext(builder.match(/async function deleteMicrocycle\([^\n]+/)[0],deletionContext);
+ await deletionContext.deleteMicrocycle({id:'p',name:'My plan',active:true});
+ assert.equal(deletionCalls.length,0,'Cancel must leave the plan untouched');
+ allowDelete=true;failDelete=true;await deletionContext.deleteMicrocycle({id:'p',name:'My plan'});
+ assert.equal(deletionContext.plan.id,'p');assert.equal(cleared,0);assert.equal(deletionContext.busy,false);
+ failDelete=false;await deletionContext.deleteMicrocycle({id:'other',name:'Other plan'});
+ assert.equal(deletionContext.plan.id,'p');assert.equal(cleared,0,'Deleting another plan must retain the open draft');
+ await deletionContext.deleteMicrocycle({id:'p',name:'My plan'});
+ assert.equal(deletionContext.plan,null);assert.equal(deletionContext.dirty,false);assert.equal(editorState.hidden,true);
+ assert.equal(cleared,1);assert.equal(deletionContext.plans.length,0);
+ assert.equal(deletionCalls.at(-1).url,'/api/mesocycles/p/archive');assert.equal(deletionCalls.at(-1).options.method,'POST');
  await logContext.loadPlannedWorkout('plan-1','a');
  const draft=logContext.draft;
  assert.equal(draft.planned_session.session_id,'a');assert.equal(draft.planLabel,'Strength block · Day A');
