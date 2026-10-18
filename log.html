@@ -397,6 +397,7 @@
       <input id="title" type="text" aria-label="Workout title" autocomplete="off" />
       <p id="clock" class="muted" style="margin:6px 0 0"></p>
       <p class="hint">Before ✓ the RPE plans the weight. Tap ✓ right after the set: the RPE you set then is the one you logged, and the weight stays.</p>
+      <div id="sessionSoreness"></div>
       <div id="plannedOrigin" class="hint" hidden></div>
     </div>
     <div id="exercises"></div>
@@ -1091,11 +1092,53 @@
   }
 
   // ── Workout screen ──────────────────────────────────────────────────────────
+  function renderSoreness() {
+    const box = $("sessionSoreness"); box.replaceChildren();
+    box.append(el("h3", null, "Soreness before this session"));
+    box.append(el("p", "hint", "Rate each movement pattern before training. Leave unanswered if unsure. Tap the selected level to clear it; flag pain or injury separately."));
+    for (const [key, title] of [["squat", "Squat"], ["bench_press", "Bench/Press"], ["deadlift", "Deadlift"]]) {
+      const group = el("fieldset");
+      group.style.cssText = "border:0;padding:0;margin:12px 0";
+      group.append(el("legend", null, title));
+      const row = el("div");
+      row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px";
+      for (const [value, label] of [[0, "None"], [1, "Mild"], [2, "Moderate"], [3, "Severe"]]) {
+        const button = el("button", null, label); button.type = "button";
+        const selected = draft.soreness?.[key]?.level === value;
+        button.setAttribute("aria-pressed", String(selected));
+        button.setAttribute("aria-label", title + " soreness: " + label);
+        button.style.minHeight = "44px";
+        if (selected) button.style.outline = "2px solid currentColor";
+        button.addEventListener("click", () => {
+          draft.soreness ||= {};
+          draft.soreness[key] ||= { level: null, pain: false };
+          draft.soreness[key].level = selected ? null : value;
+          saveDraft(); renderSoreness();
+        });
+        row.append(button);
+      }
+      const painLabel = el("label");
+      painLabel.style.cssText = "display:flex;align-items:center;gap:8px;min-height:44px;margin-top:4px";
+      const pain = el("input"); pain.type = "checkbox";
+      pain.checked = draft.soreness?.[key]?.pain === true;
+      pain.setAttribute("aria-label", title + ": pain or injury");
+      pain.addEventListener("change", () => {
+        draft.soreness ||= {};
+        draft.soreness[key] ||= { level: null, pain: false };
+        draft.soreness[key].pain = pain.checked;
+        saveDraft();
+      });
+      painLabel.append(pain, el("span", null, "Pain or injury"));
+      group.append(row, painLabel); box.append(group);
+    }
+  }
+
   function renderWorkout() {
     closeNumberPad();
     const stay = !$("workout").hidden, y = window.scrollY;   // redrawing the workout you are already on keeps your place
     show("workout");
     $("title").value = draft.title;
+    renderSoreness();
     const origin = $("plannedOrigin"); origin.hidden = !draft.planned_session; origin.replaceChildren();
     if (draft.planned_session) {
       origin.append(el("span", null, draft.planLabel || "Planned workout"));
@@ -1695,7 +1738,7 @@
       if (sets.length) exercises.push({ exercise_template_id: ex.template_id, title: ex.title, notes: ex.notes, sets });
     }
     if (!exercises.length) throw new Error("Tap ✓ on each set you did before saving.");
-    return { title: draft.title.trim() || "Workout", weight_unit: unit, start_time: draft.startedAt, end_time: new Date().toISOString(), exercises,
+    return { soreness: draft.soreness || null, title: draft.title.trim() || "Workout", weight_unit: unit, start_time: draft.startedAt, end_time: new Date().toISOString(), exercises,
       ...(draft.planned_session ? { planned_session: draft.planned_session } : {}) };
   }
 

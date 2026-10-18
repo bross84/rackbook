@@ -19,6 +19,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 from database import get_db, get_rpe_percentage, init_db
+import soreness
+import fatigue
 import body_weight
 import hevy_client
 import exercise_state
@@ -182,6 +184,17 @@ class EntryExercise(BaseModel):
     sets: list[EntrySet]
 
 
+class PatternSoreness(BaseModel):
+    level: int | None = Field(default=None, ge=0, le=3, strict=True)
+    pain: bool = Field(default=False, strict=True)
+
+
+class SessionSoreness(BaseModel):
+    squat: PatternSoreness | None = None
+    bench_press: PatternSoreness | None = None
+    deadlift: PatternSoreness | None = None
+
+
 class WorkoutEntry(BaseModel):
     title: str
     weight_unit: Literal['kg', 'lb'] | None = None
@@ -189,6 +202,7 @@ class WorkoutEntry(BaseModel):
     start_time: str
     end_time: str
     exercises: list[EntryExercise]
+    soreness: SessionSoreness | None = None
     planned_session: mesocycles.PlanLink | None = None
 
 
@@ -323,6 +337,63 @@ def stress_movements():
         rows = conn.execute("SELECT id, title FROM hevy_exercise_cache ORDER BY title COLLATE NOCASE").fetchall()
     primary = {progress.LIFT_TITLES[key]: key for key in ("squat", "bench", "deadlift")}
     return [{"id": r["id"], "title": r["title"], "primary_key": primary.get(r["title"])} for r in rows]
+
+
+class FatiguePoint(BaseModel):
+    dose_complete: bool
+    rolling_sets_7: int
+    start_time: str
+    e1rm_lb: float | None
+    ts_reps: int | None
+    ts_rpe: float | None
+    bodyweight_kg: float | None
+    bw_readings: int
+    relative_e1rm: float | None
+    working_sets: int | None
+    total_reps: int | None
+    median_reps: float | None
+    median_rpe: float | None
+    soreness: int | None
+    pain: bool
+
+
+class FatigueCollection(BaseModel):
+    ready: bool
+    sessions: int
+    required_sessions: int
+    previous_paired: int
+    recent_paired: int
+    required_paired_per_window: int
+    window_sessions: int
+    recent_ratings: int
+    required_recent_ratings: int
+
+
+class FatigueTrend(BaseModel):
+    model_version: str
+    pattern: str | None
+    as_of: str
+    baseline_start: str | None
+    gap_reset: bool
+    comparable_sessions: int
+    needed_sessions: int
+    collection: FatigueCollection
+    status: str
+    action: str
+    message: str
+    reasons: list[str]
+    e1rm_change_pct: float | None
+    bw_change_pct: float | None
+    relative_change_pct: float | None
+    sets_change: float | None
+    recent_sets: float | None
+    recent_soreness: float | None
+    points: list[FatiguePoint]
+
+
+@app.get("/movement-fatigue/{exercise_template_id}", response_model=FatigueTrend)
+def movement_fatigue(exercise_template_id: str):
+    return fatigue.load(exercise_template_id, now=datetime.now(timezone.utc))
 
 
 @app.get("/movement-stress/{exercise_template_id}/history", response_model=StressDashboard)
@@ -555,6 +626,12 @@ def create_hevy_workout(entry: WorkoutEntry):
     except Exception:
         # Hevy already has the workout; failing here would make a retry post it twice
         logger.exception("Could not record the sets of workout %s locally", created.get("id"))
+    try:
+        if entry.soreness:
+            soreness.record(created.get("id"), entry.start_time, entry.soreness.model_dump())
+    except Exception:
+        logger.exception("Could not record soreness locally")
+        warning = (warning + ' ' if warning else '') + 'Saved to Hevy, but soreness could not be saved locally. Do not save the workout again.'
     return {"id": created.get("id"), **({'plan_warning': warning} if warning else {})}
 
 

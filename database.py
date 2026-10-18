@@ -22,6 +22,16 @@ def init_db() -> None:
             pass  # already renamed, or new DB (table doesn't exist yet)
 
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS session_soreness (
+                hevy_workout_id TEXT PRIMARY KEY NOT NULL,
+                workout_start TEXT NOT NULL,
+                squat INTEGER CHECK(squat BETWEEN 0 AND 3),
+                squat_pain INTEGER CHECK(squat_pain IN (0, 1)),
+                bench_press INTEGER CHECK(bench_press BETWEEN 0 AND 3),
+                bench_press_pain INTEGER CHECK(bench_press_pain IN (0, 1)),
+                deadlift INTEGER CHECK(deadlift BETWEEN 0 AND 3),
+                deadlift_pain INTEGER CHECK(deadlift_pain IN (0, 1))
+            );
             CREATE TABLE IF NOT EXISTS mesocycles (
                 id TEXT PRIMARY KEY,
                 document TEXT NOT NULL,

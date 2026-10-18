@@ -38,6 +38,12 @@
     th,td { text-align:right; padding:10px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
     th:first-child,td:first-child { text-align:left; } th { color:var(--muted); font-weight:500; }
     td small { display:block; white-space:normal; min-width:120px; max-width:220px; } caption { text-align:left; font-size:13px; color:var(--muted); margin-bottom:8px; }
+    .observation-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0; }
+    .observation-grid figure { margin:0; min-width:0; }
+    .observation-grid svg text { font-size:16px; }
+    .observation-grid figcaption { font-size:14px; font-weight:600; }
+    .collection-progress { display:block; width:100%; height:12px; margin:8px 0 12px; accent-color:var(--accent); }
+    @media(max-width:620px) { .observation-grid { grid-template-columns:1fr; } }
     .error { color:var(--error); } summary { cursor:pointer; min-height:44px; padding:10px 0; } #detail[aria-busy="true"] { opacity:.6; }
     @media(max-width:620px) { .overview { grid-template-columns:1fr; gap:8px; } .movement-card { padding:10px 12px; } .movement-card .card-score { font-size:20px; } .metrics { gap:6px; } .metric strong { font-size:22px; } .card { padding:12px; } }
 
@@ -135,6 +141,7 @@
   </div>
   <div id="status" role="status"></div>
   <section class="overview" id="overview" aria-label="Main movements"></section>
+  <section id="fatigue" aria-label="Performance and soreness trends"></section>
   <section id="detail" aria-label="Selected movement" aria-busy="false"></section>
   <details class="card"><summary>How to read these metrics</summary>
     <p class="note">Total stress is the average of central and peripheral stress. Central emphasizes relative load; peripheral also weights proximity to failure. These are estimates of workload, not measurements of nervous-system fatigue or recovery limits.</p>
@@ -249,10 +256,107 @@
     }
     table.append(caption,head,body); wrap.append(table); history.append(wrap); box.append(history);
   }
+  const sorenessNames = ["None", "Mild", "Moderate", "Severe"];
+  const trendNames = { building_baseline:"Collecting baseline", stable:"Provisional: stable TS trend", improving:"Provisional: improving TS trend", declining:"Provisional: declining TS trend", pain_flag:"Pain/injury recorded" };
+  function percent(value) { return value == null ? "—" : (value > 0 ? "+" : "") + value.toFixed(1) + "%"; }
+  function observationChart(points, key, title, baselineStart) {
+    const figure=el("figure"); figure.append(el("figcaption",null,title));
+    const rows=points.filter(p=>Number.isFinite(Date.parse(p.start_time)));
+    const known=rows.filter(p=>Number.isFinite(p[key]));
+    if(!known.length && !(key==="soreness" && rows.some(p=>p.pain))) {
+      figure.append(el("p","note","No observations yet.")); return figure;
+    }
+    const svg=svgNode("svg",{viewBox:"0 0 480 210",role:"img","aria-label":title+" recorded observations"});
+    svg.append(svgNode("title",{},title+". Recorded observations only; gaps are not filled. Exact values are in the observations table."));
+    const times=rows.map(p=>Date.parse(p.start_time)), first=Math.min(...times), last=Math.max(...times);
+    const values=known.map(p=>p[key]);
+    let lower=key==="soreness"?0:Math.min(...values), upper=key==="soreness"?3:Math.max(...values);
+    if(key!=="soreness") { const pad=Math.max((upper-lower)*.15,upper*.02,1); lower=Math.max(0,lower-pad); upper+=pad; }
+    const x=t=>first===last?270:75+(t-first)/(last-first)*385, y=v=>165-(v-lower)/(upper-lower)*130;
+    const ticks=key==="soreness"?[0,1,2,3]:key==="working_sets"?[...new Set([Math.ceil(lower),Math.round((lower+upper)/2),Math.floor(upper)])]:[lower,(lower+upper)/2,upper];
+    for(const value of ticks) {
+      svg.append(svgNode("line",{x1:75,x2:460,y1:y(value),y2:y(value),stroke:"var(--line)"}),
+        svgNode("text",{x:67,y:y(value)+4,"text-anchor":"end"},key==="soreness"?sorenessNames[value]:value.toFixed(key==="working_sets"?0:1)));
+    }
+    let previous=null;
+    for(const point of rows) {
+      const time=Date.parse(point.start_time), value=point[key];
+      if(Number.isFinite(value)) {
+        const old=baselineStart && time<Date.parse(baselineStart), color=old?"var(--muted)":"var(--accent)";
+        // Soreness is categorical: show points only. Other lines just join adjacent observations.
+        if(key!=="soreness" && previous && time-previous.time<21*86400000) {
+          svg.append(svgNode("line",{x1:x(previous.time),y1:y(previous.value),x2:x(time),y2:y(value),stroke:color,"stroke-width":1.5,opacity:.45}));
+        }
+        const dot=svgNode("circle",{cx:x(time),cy:y(value),r:4,fill:color});
+        dot.append(svgNode("title",{},date(point.start_time)+" · "+(key==="soreness"?sorenessNames[value]:value.toFixed(1)))); svg.append(dot);
+        previous={time,value};
+      } else previous=null;
+      if(key==="soreness" && point.pain) {
+        const marker=svgNode("text",{x:x(time),y:18,fill:"var(--error)","text-anchor":"middle","font-weight":"bold"},"!");
+        marker.append(svgNode("title",{},date(point.start_time)+" · Pain or injury flagged")); svg.append(marker);
+      }
+    }
+    svg.append(svgNode("text",{x:75,y:198},date(rows[0].start_time)),svgNode("text",{x:460,y:198,"text-anchor":"end"},date(rows.at(-1).start_time)));
+    figure.append(svg); return figure;
+  }
+  function renderFatigue(data) {
+    const box=$("fatigue"); box.replaceChildren();
+    const card=el("section","card"); card.append(el("h2",null,"Performance & soreness"));
+    const collection=data.collection;
+    card.append(el("h3",null,trendNames[data.status] || data.status),el("p",null,data.message));
+    if(!collection.ready) {
+      const count=collection.sessions+" / "+collection.required_sessions+" comparable TS sessions";
+      card.append(el("p",null,count));
+      const progress=el("progress","collection-progress"); progress.max=collection.required_sessions; progress.value=Math.min(collection.sessions,collection.required_sessions);
+      progress.setAttribute("aria-label",count); card.append(progress);
+      card.append(el("p","note","No minimum number of weeks. Each movement builds its own baseline."));
+      card.append(el("p","note","Matched observations: "+collection.previous_paired+" of "+collection.window_sessions+" in the earlier group; "+collection.recent_paired+" of "+collection.window_sessions+" in the latest group. At least "+collection.required_paired_per_window+" are needed in each."));
+      card.append(el("p","note","An observation needs TS, BW, soreness, and recorded sets/reps/RPE. Recent soreness check-ins: "+collection.recent_ratings+" / "+collection.required_recent_ratings+"."));
+    }
+    if(collection.ready && data.e1rm_change_pct!=null) {
+      const metrics=el("div","metrics");
+      for(const [label,value] of [["TS e1RM",percent(data.e1rm_change_pct)],["7-day average BW",percent(data.bw_change_pct)],["e1RM / BW",percent(data.relative_change_pct)]]) {
+        const node=el("div","metric"); node.append(el("span",null,label),el("strong",null,value)); metrics.append(node);
+      }
+      card.append(metrics);
+    }
+    card.append(el("p","note",data.baseline_start?"Current baseline starts "+date(data.baseline_start):"No active baseline"));
+    if(data.gap_reset)card.append(el("p","note","Baseline reset after a gap of 21 days. Earlier history remains visible in grey."));
+    if(!data.pattern)card.append(el("p","note","No soreness-pattern mapping for this exercise. Interpretations need a mapped main squat, bench, press or deadlift; exercise histories remain separate."));
+    const bwLink=el("a","note","Sync bodyweight on Progress"); bwLink.href="/progress"; card.append(bwLink);
+    const charts=el("div","observation-grid");
+    for(const [key,title] of [["e1rm_lb","Marked TS e1RM (lb)"],["bodyweight_kg","Bodyweight · 7-day mean (kg)"],["working_sets","Working sets per session"],["soreness","Pre-session soreness"]])charts.append(observationChart(data.points,key,title,data.baseline_start));
+    card.append(charts,el("p","note","Recorded history is visible from the first session. These are observations, not fitted trend lines or predictions. Blank data stays blank; ! marks a reported pain/injury flag. The History selector applies to stress history below."));
+    for(const reason of data.reasons)card.append(el("p","note",reason));
+    const help=el("details"); help.append(el("summary",null,"When interpretations begin"),el("p","note","First collect 12 comparable marked-TS sessions for this movement: the same TS reps and RPE within one point of the latest. At least five sessions in each group of six need BW, soreness and complete sets/reps/RPE, plus soreness at the last three movement sessions. There is no waiting period in weeks."),
+      el("p","note","After collection, comparisons use matched medians from the latest six and previous six sessions. The initial flags are a 3% e1RM change and a 1% BW change. Interpretations and set-change suggestions remain provisional; reaching the count does not establish accuracy. Plans are never changed automatically."));
+    const source=el("a",null,"Training-load monitoring consensus"); source.href="https://pubmed.ncbi.nlm.nih.gov/28463642/";
+    help.append(source,el("p","note","The collection threshold and suggestion rules are Rackbook heuristics; this source does not validate this algorithm. BW provides context and does not establish why strength changed.")); card.append(help);
+    if(data.points.length) {
+      const history=el("details"); history.append(el("summary",null,"TS, BW and soreness observations"));
+      const wrap=el("div","table-scroll"); wrap.tabIndex=0;
+      const table=el("table"), head=el("thead"), row=el("tr");
+      for(const title of ["Session","TS e1RM (lb)","TS reps / RPE","BW 7d (kg)","Sets / reps","Soreness","Pain/injury"]) { const cell=el("th",null,title); cell.scope="col"; row.append(cell); }
+      head.append(row); const body=el("tbody");
+      for(const point of [...data.points].reverse()) {
+        const r=el("tr");
+        const values=[date(point.start_time),point.e1rm_lb?.toFixed(1)??"—",point.ts_reps==null?"—":point.ts_reps+" @"+point.ts_rpe,point.bodyweight_kg?.toFixed(1)??"—",point.working_sets==null?"—":point.working_sets+" / "+(point.total_reps??"—"),point.soreness==null?"Unrated":sorenessNames[point.soreness],point.pain?"Flagged":"—"];
+        for(const value of values)r.append(el("td",null,value)); body.append(r);
+      }
+      table.append(head,body); wrap.append(table); history.append(wrap); card.append(history);
+    }
+    box.append(card);
+  }
+  async function loadFatigue(id, token) {
+    $("fatigue").replaceChildren(el("p","note","Loading TS and soreness trends…"));
+    try { const data=await api("/movement-fatigue/"+encodeURIComponent(id)); if(token===generation)renderFatigue(data); }
+    catch(error) { if(token===generation)$("fatigue").replaceChildren(el("p","error","Could not load performance trends. Use Refresh to retry.")); }
+  }
   async function selectMovement(id, force=false) {
     if(!id)return; selected=id; $("movement").value=id;
     for(const [key,card] of cards)card.setAttribute("aria-pressed",String(key===id));
     const token=++generation; $("detail").setAttribute("aria-busy","true"); $("detail").replaceChildren(el("p","note","Loading stress history…"));
+    loadFatigue(id, token);
     try { const data=await load(id,force); if(token!==generation)return; renderDetail(data); paintCard(id,data); }
     catch(error) { if(token!==generation)return; $("detail").replaceChildren(el("p","error",error.message),el("p","note","Use Refresh to retry.")); paintCard(id,null,error.message); }
     finally { if(token===generation)$("detail").setAttribute("aria-busy","false"); }
