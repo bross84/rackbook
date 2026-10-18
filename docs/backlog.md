@@ -29,6 +29,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Incomplete naming previews (2026-10-18): blank or invalid Cycle/Week values show `?` in generated names instead of `null`. Blank inputs remain blank through redraws and draft restoration; required numeric validation still blocks saving until corrected.
+
 - Program workout naming (2026-10-18): editable Program, Cycle and Week generate names such as BS-Bridge1.1.1, with the day number following workout order. Duplicating a microcycle increments Week and resets completion with fresh session ids. Existing custom names remain until a program is entered. Completed prescriptions retain their names; duplicate the microcycle to change its naming fields.
 
 - Blank microcycle builder (2026-10-17): new plans start with zero days, with a persistent Add day control and explicit Remove day action, including removal of the last uncompleted day. Empty plans can be saved; activation requires a day. Old untouched Day 1/2/3 placeholders are cleared once in saved plans and editor drafts, with backups; configured days and completed history are preserved.
