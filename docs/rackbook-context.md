@@ -305,3 +305,8 @@ Ticking the final outstanding working set collapses the card to its header with 
 Recent workouts exposes Edit soreness only when a local set record or soreness record exists (`WorkoutView.soreness_editable`). `GET /workout-soreness/{id}` reads current check-ins; `PATCH` accepts supplied pattern objects using the existing strict 0–3/pain validation. Each supplied pattern replaces that pattern's check-in; null clears it. The UI submits only changed patterns, so unrelated check-ins are preserved. Updates merge with current values inside a local transaction, retaining the original workout start, exact sets, TS records and microcycle links. A missed check-in can be added from a local set record even if no soreness row exists. Unknown workout ids return 404 without Hevy calls; Hevy-only history is not backfilled. The original save's insert-on-conflict behavior remains unchanged; intentional edits use `soreness.update`. Editing makes no Hevy writes and fatigue analysis reads the corrected observations on its next request.
 
 Validation: full Python suite, standalone frontend checks including `tests/test_log_collapse.cjs` and `tests/test_log_soreness.cjs`, and phone-width browser tests with disposable data and a mocked Hevy client.
+
+
+## Browser favicon (2026-10-19)
+
+All seven HTML pages declare `/static/icon-192.png` as their PNG favicon, reusing the existing barbell app icon. `/favicon.ico` serves the same file with `image/png` and revalidation headers for browsers requesting the conventional fallback path. The manifest and Apple home-screen icon links retain their existing behavior.

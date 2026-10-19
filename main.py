@@ -68,6 +68,11 @@ def legacy_index():
     return FileResponse("index.html", headers=NO_CACHE)
 
 
+@app.get("/favicon.ico")
+def favicon():
+    return FileResponse("static/icon-192.png", media_type="image/png", headers=NO_CACHE)
+
+
 # Lets a phone or tablet add the pages to its home screen and open them like an app.
 @app.get("/manifest.webmanifest")
 def web_app_manifest():
