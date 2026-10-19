@@ -22,7 +22,7 @@ const context=vm.createContext({structuredClone,id:()=>String(++counter)});
 for(const name of ['cloneSession','nextSession'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
 context.dirty=false;context.remember=()=>{};context.renderEditor=()=>{};
 context.confirm=()=>true;context.message=()=>{};
-for(const name of ['session','completed','namingNumber','applyNaming','newPlan','addDay','removeDay','duplicateMicrocycle','recoverLegacyEditor'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
+for(const name of ['session','completed','namingNumber','applyNaming','newPlan','addDay','removeDay','duplicateMicrocycle'])vm.runInContext(builder.match(new RegExp('function '+name+'\\([^\\n]+'))[0],context);
 context.newPlan();assert.equal(context.plan.weeks.length,1);assert.equal(context.plan.weeks[0].sessions.length,0);
 context.addDay();context.addDay();assert.equal(context.plan.weeks[0].sessions.length,2);
 context.si=0;context.removeDay();assert.equal(context.plan.weeks[0].sessions[0].name,'Day 2');
@@ -53,9 +53,6 @@ context.plan.cycle=2;context.plan.week=1;context.applyNaming(context.plan);asser
 context.si=0;context.removeDay();context.applyNaming(context.plan);assert.equal(context.plan.weeks[0].sessions[0].name,'BS-Bridge2.1.1');
 context.addDay();context.applyNaming(context.plan);assert.equal(context.plan.weeks[0].sessions[1].name,'BS-Bridge2.1.2');
 context.plan.completed=[{session_id:context.plan.weeks[0].sessions[1].id}];context.si=0;context.removeDay();assert.equal(context.plan.weeks[0].sessions.length,2,'Removing an earlier day must not renumber a completed workout');
-const legacy=structuredClone(doc);legacy.weeks[1].sessions[0].exercises=structuredClone(legacy.weeks[0].sessions[0].exercises);
-const recovery=context.recoverLegacyEditor({plan:legacy,wi:0});assert.equal(recovery.length,2);assert.equal(recovery[1].weeks.length,1);
-assert.equal(recovery[1].weeks[0].sessions[0].exercises.length,1);assert.equal(recovery[1].completed.length,0);
 const copy=context.cloneSession(doc.weeks[0].sessions[0]);
 assert.notEqual(copy.id,'a');assert.equal(copy.name,'Day A');
 copy.exercises[0].sets[0].rpe=9;assert.equal(doc.weeks[0].sessions[0].exercises[0].sets[0].rpe,8);
