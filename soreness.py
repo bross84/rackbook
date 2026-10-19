@@ -38,7 +38,8 @@ def update(workout_id: str, ratings: dict) -> dict:
         current = {key: {"level": row[key] if row else None, "pain": bool(row[key + "_pain"]) if row else False}
                    for key in ("squat", "bench_press", "deadlift")}
         for key, value in ratings.items():
-            current[key] = value or {"level": None, "pain": False}
+            # Only the fields sent change; an explicit null clears the whole pattern.
+            current[key] = {**current[key], **value} if value else {"level": None, "pain": False}
         values = []
         for value in current.values():
             level, pain = value.get("level"), value.get("pain", False)

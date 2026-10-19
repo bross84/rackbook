@@ -26,7 +26,7 @@ function element(tag, cls, text) {
 
 let picked, pickedCurrent;
 const context = vm.createContext({
-  unit: 'kg',
+  unit: 'kg', sorenessPatterns: null,
   el: element,
   RPES: [4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10],
   pickRpe(current, callback) { pickedCurrent = current; picked = callback; },

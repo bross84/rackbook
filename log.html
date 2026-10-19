@@ -1776,7 +1776,10 @@
       if (sets.length) exercises.push({ exercise_template_id: ex.template_id, title: ex.title, notes: ex.notes, sets });
     }
     if (!exercises.length) throw new Error("Tap ✓ on each set you did before saving.");
-    return { soreness: draft.soreness || null, title: draft.title.trim() || "Workout", weight_unit: unit, start_time: draft.startedAt, end_time: new Date().toISOString(), exercises,
+    // Keep check-ins only for movements in the saved workout; one for a removed card would record a movement not trained.
+    const trained = new Set(exercises.map((ex) => sorenessPatterns && sorenessPatterns[ex.title]));
+    const soreness = Object.fromEntries(Object.entries(draft.soreness || {}).filter(([key]) => trained.has(key)));
+    return { soreness: Object.keys(soreness).length ? soreness : null, title: draft.title.trim() || "Workout", weight_unit: unit, start_time: draft.startedAt, end_time: new Date().toISOString(), exercises,
       ...(draft.planned_session ? { planned_session: draft.planned_session } : {}) };
   }
 

@@ -128,3 +128,16 @@ class SorenessCase(unittest.TestCase):
             response = self.client.get("/hevy/workouts")
         self.assertEqual(response.status_code, 200)
         self.assertEqual([w["soreness_editable"] for w in response.json()["workouts"]], [True, False])
+
+
+class PatchKeepsUnsentFields(unittest.TestCase):
+    def test_level_only_patch_keeps_pain_and_pain_only_patch_keeps_level(self):
+        import soreness
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DB_PATH": os.path.join(tmp, "t.db")}):
+            from database import init_db
+            init_db()
+            soreness.record("w1", "2026-10-18T10:00:00Z", {"squat": {"level": 2, "pain": True}})
+            self.assertEqual({"level": 3, "pain": True}, soreness.update("w1", {"squat": {"level": 3}})["squat"])
+            self.assertEqual({"level": 3, "pain": False}, soreness.update("w1", {"squat": {"pain": False}})["squat"])
+            self.assertEqual({"level": None, "pain": False}, soreness.update("w1", {"squat": None})["squat"])
+            gc.collect()

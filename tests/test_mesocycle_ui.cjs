@@ -66,7 +66,7 @@ doc.completed.push({session_id:'c'});assert.equal(context.nextSession(doc),null)
 doc.completed=[];
 let snapshots=0, loaded=[];
 const logContext=vm.createContext({
- unit:'kg', draft:null, api:async()=>structuredClone(doc), uid:()=>String(++counter),
+ unit:'kg', sorenessPatterns:null, draft:null, api:async()=>structuredClone(doc), uid:()=>String(++counter),
  refFromServer:()=>({basis:'tm',ls:true}),saveDraft:()=>snapshots++,say(){},renderWorkout(){},
  loadState:ex=>loaded.push(ex.template_id),confirm:()=>false,
  document:{querySelector:()=>null},
@@ -103,6 +103,10 @@ vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  
  const payload=logContext.buildEntry();
  assert.equal(payload.weight_unit,'kg');assert.equal(payload.planned_session.session_id,'a');assert.equal(payload.exercises[0].sets.length,1);
  assert.equal(payload.exercises[0].sets[0].ts,true);
+ logContext.sorenessPatterns={Squat:'squat',Deadlift:'deadlift'};
+ logContext.draft.soreness={squat:{level:2,pain:false},deadlift:{level:1,pain:false}};
+ assert.deepEqual(JSON.parse(JSON.stringify(logContext.buildEntry().soreness)),{squat:{level:2,pain:false}},'A check-in for a movement not in the workout must not be saved');
+ logContext.draft.soreness={deadlift:{level:1,pain:false}};assert.equal(logContext.buildEntry().soreness,null);delete logContext.draft.soreness;
  const convertedPounds=132.34/2.20462262185;sets[0].kg=String(convertedPounds);
  assert.equal(logContext.buildEntry().exercises[0].sets[0].weight_kg,convertedPounds,'Saving must not round converted weights');
  logContext.unit='lb';assert.equal(logContext.buildEntry().weight_unit,'lb','Upload must carry the currently selected unit');
