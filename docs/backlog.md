@@ -59,6 +59,7 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Cancel in the microcycle builder (2026-10-19): a Cancel button next to Save closes the editor and discards the unsaved draft (asks first if there are unsaved changes), so a started build can be abandoned without saving.
 - Browser favicon (2026-10-19): every page links to the existing Rackbook barbell app icon. `/favicon.ico` also serves that PNG for browser fallback requests. Home-screen icons remain configured separately.
 
 - Exact RPE on Hevy history (2026-10-18): where the app reads a movement's history from Hevy (the Previous column, last-session e1RM and the Progress page), an RPE Hevy dropped (below 6, or 6.5) is filled back in from `logged_sets` by `set_log.overlay_exact_rpe`. Matched by Hevy workout id and position; a workout is only filled when both sides have the same sets, reps and types in order, and an RPE Hevy does hold is never replaced. Workouts logged before 2026-10-15 or outside Rackbook stay as Hevy has them.
