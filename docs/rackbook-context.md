@@ -51,7 +51,7 @@ The six main pages share an inline `rackbook-theme` style block for the blue/sla
 | `/progress` | `progress.html` | Each main lift's e1RM, 7-day bodyweight and DOTS-style score over time |
 | `/stress` | `stress.html` | Main three movement overview, selector, stress components, rolling totals, and retrospective session history |
 | `/rpe-charts` | `rpe_charts.html` | RPE tables built from the user's own sets (Squat, Bench, Deadlift, General tabs) |
-| `/legacy` | `index.html` | The original 5/3/1 planner; its `#settings` is where the Hevy API key is saved |
+| `/legacy` | `index.html` | Settings only: Hevy API key, exercise cache sync, unit preference (the old 5/3/1 Workout and Program tabs were removed 2026-10-19; their backend routes remain) |
 | `/health` | | `{"status":"ok"}` |
 
 Routes used by the log, RPE and progress pages (the legacy planner has many more, see `main.py`):
@@ -213,7 +213,7 @@ microcycles                                                  (older cycle table)
 
 ---
 
-## Legacy 5/3/1 planner (`/legacy`, not developed further)
+## Legacy 5/3/1 planner (backend only; its page was removed 2026-10-19)
 
 Programs are program-agnostic: tiers (behaviours `percentage`, `fixed`, `progression`, `free`), wave structure per exercise slot (`wave_params` JSON), microcycles numbered and user-labelled. All percentages derive from RPE (`target_rpe` and `actual_rpe` per set). `test_session_route.py` pins its current session and e1RM behaviour; `expectedFailure` tests there mark known bugs.
 

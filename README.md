@@ -20,7 +20,7 @@ Deployed via Docker on CasaOS, used as a desktop and mobile PWA. It has no login
 - **Progress** (`/progress`) — each main lift's e1RM (Hevy history + the RPE table) against your 7-day average bodyweight (Apple Health via Hevy) and a DOTS-style strength score, so a cut can be told apart from lost strength. Set `DOTS_SEX=female` for the female coefficients (default male). The Hevy exercise each lift reads is `LIFT_TITLES` in `progress.py`.
 - **Recent workouts** (`/recent`) — your latest Hevy workouts.
 - **Movement stress** (`/stress`) — squat, bench, and deadlift overview plus a movement selector, central/peripheral breakdowns, rolling 7/28-day totals, and retrospective session history. Historical blank RPEs are marked as @5 estimates; saved workouts are not modified. The log shows only the compact session score and window.
-- **Legacy 5/3/1 planner** (`/legacy`) — the original programme designer for Wendler's 5/3/1 BBB with autoregulation (below). It is no longer the focus, and its settings page is where the Hevy API key is saved.
+- **Settings** (`/legacy#settings`) — the Hevy API key, exercise cache sync and unit preference. The old 5/3/1 Workout and Program tabs were removed from this page (2026-10-19); the backend routes and data for them remain.
 
 ---
 
@@ -44,7 +44,7 @@ Deployed via Docker on CasaOS, used as a desktop and mobile PWA. It has no login
 
 ## Legacy 5/3/1 planner
 
-Kept for reference; `/legacy` still works.
+Kept for reference. The `/legacy` page now shows only Settings; the planner's screens are gone.
 
 ### Three tiers
 
