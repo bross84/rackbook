@@ -121,7 +121,7 @@ function button(text,fn,cls) {const b=el('button',cls,text);b.type='button';b.ad
 async function api(url,options={}) {const r=await fetch(url,options),data=r.status===204?null:await r.json();if(!r.ok)throw Error(typeof data.detail==='string'?data.detail:'Check the plan: '+(data.detail||[]).map(x=>x.msg).join('; '));return data;}
 const json=(method,body)=>({method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 function message(text) {$('status').textContent=text;$('status').className=text?'message':'';}
-function remember() {dirty=true;$('saveState').textContent='Unsaved changes';try{localStorage.setItem(KEY,JSON.stringify({plan,wi,si}));}catch(e){message('This device cannot keep an editor draft. Save the plan before leaving.');}}
+function remember() {dirty=true;$('saveState').textContent='Unsaved changes';}
 function session() {return plan.weeks[wi].sessions[si];}
 function completed(s) {return (plan.completed||[]).some(c=>c.session_id===s.id);}
 function cloneSession(s) {const copy=structuredClone(s);copy.id=id();return copy;}
@@ -180,17 +180,7 @@ $('usePlan').addEventListener('click',async()=>{if((dirty||!plan.id)&&!await sav
 $('closeExercisePicker').addEventListener('click',()=>$('exercisePicker').close());$('exerciseSearch').addEventListener('input',renderExercises);
 $('syncExercises').addEventListener('click',async()=>{const b=$('syncExercises');b.disabled=true;try{await api('/exercises/sync',{method:'POST'});await loadPicker();}catch(e){$('pickerStatus').textContent=e.message;}finally{b.disabled=false;}});
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
-refreshPlans().then(()=>{try{const saved=JSON.parse(localStorage.getItem(KEY));if(saved&&saved.plan){
- if(saved.plan.weeks.length>1){
-  recovered=recoverLegacyEditor(saved);
-  localStorage.setItem(KEY+'.weeks',JSON.stringify(recovered));plan=structuredClone(recovered[0]);wi=si=0;remember();renderLibrary();
- }else{plan=saved.plan;wi=0;si=Math.min(saved.si||0,plan.weeks[0].sessions.length-1);dirty=true;}
- if(!localStorage.getItem(KEY+'.blankDays')){
-  const days=plan.weeks[0].sessions;
-  if(days.length===3&&days.every((s,i)=>s.name==='Day '+(i+1)&&!s.exercises.length)&&!(plan.completed||[]).length){localStorage.setItem(KEY+'.beforeBlankDays',JSON.stringify(saved));plan.weeks[0].sessions=[];remember();}
- }
- renderEditor();message('Restored your unsaved one-week draft.');
-}localStorage.setItem(KEY+'.blankDays','done');}catch(e){message('Could not restore the editor draft. Saved plans are still available.');}}).catch(e=>message(e.message));
+refreshPlans().catch(e=>message(e.message));
 </script><script id="page-navigation">
   (() => {
     const back=document.getElementById("pageBack");
