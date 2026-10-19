@@ -161,7 +161,7 @@
 <body>
 <main>
   <header class="app-header">
-    <div class="page-heading"><button id="pageBack" class="page-back" type="button" aria-label="Go back">← Back</button><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Recent workouts</h1></div></div>
+    <div class="page-heading"><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Recent workouts</h1></div></div>
     <nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent" aria-current="page">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <div id="status"></div>
@@ -365,17 +365,5 @@
   loadMore();
 </script>
 
-<script id="page-navigation">
-  (() => {
-    const back=document.getElementById("pageBack");
-    let hasPrevious=false;
-    try { hasPrevious=history.length>1 && new URL(document.referrer).origin===location.origin; } catch (_) {}
-    back.disabled=!hasPrevious && (location.pathname==="/log" || location.pathname==="/");
-    back.addEventListener("click", () => {
-      if(hasPrevious)history.back();
-      else location.assign("/log");
-    });
-  })();
-</script>
 </body>
 </html>

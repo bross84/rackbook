@@ -98,7 +98,7 @@ dialog {color:var(--text);background:var(--card);border:1px solid var(--line);bo
       *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
     }
   </style></head><body><main>
-<header class="app-header"><div class="page-heading"><button id="pageBack" class="page-back" type="button" aria-label="Go back">← Back</button><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Microcycle Builder</h1></div></div><nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles" aria-current="page">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav></header>
+<header class="app-header"><div class="page-heading"><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Microcycle Builder</h1></div></div><nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles" aria-current="page">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav></header>
 <p class="muted">Plan one week of workouts and train at your own pace. The next workout waits until you finish and save the current one.</p>
 <div id="status" role="status"></div>
 <div class="row editor-tools"><h2 class="grow">Your plans</h2><button id="newPlan" type="button">+ New microcycle</button></div>
@@ -181,15 +181,4 @@ $('closeExercisePicker').addEventListener('click',()=>$('exercisePicker').close(
 $('syncExercises').addEventListener('click',async()=>{const b=$('syncExercises');b.disabled=true;try{await api('/exercises/sync',{method:'POST'});await loadPicker();}catch(e){$('pickerStatus').textContent=e.message;}finally{b.disabled=false;}});
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 refreshPlans().catch(e=>message(e.message));
-</script><script id="page-navigation">
-  (() => {
-    const back=document.getElementById("pageBack");
-    let hasPrevious=false;
-    try { hasPrevious=history.length>1 && new URL(document.referrer).origin===location.origin; } catch (_) {}
-    back.disabled=!hasPrevious && (location.pathname==="/log" || location.pathname==="/");
-    back.addEventListener("click", () => {
-      if(hasPrevious)history.back();
-      else location.assign("/log");
-    });
-  })();
 </script></body></html>

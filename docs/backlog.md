@@ -59,7 +59,7 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
-- Settings page cleanup (2026-10-19): the old 5/3/1 Workout and Program tabs and their code were removed from `index.html` (served at `/legacy`); only Settings remains. Backend routes and tables for the old planner are untouched.
+- Settings page cleanup (2026-10-19): the old 5/3/1 Workout and Program tabs and their code were removed from `index.html` (served at `/legacy`); only Settings remains. The Back button now appears only on this Settings page; the other pages dropped it. Backend routes and tables for the old planner are untouched.
 - Cancel in the microcycle builder (2026-10-19): a Cancel button next to Save closes the editor and discards the unsaved draft (asks first if there are unsaved changes), so a started build can be abandoned without saving. The builder no longer keeps an unsaved draft in the browser: only saved plans persist, and a reload loses unsaved edits (the leave-page warning still appears).
 - Browser favicon (2026-10-19): every page links to the existing Rackbook barbell app icon. `/favicon.ico` also serves that PNG for browser fallback requests. Home-screen icons remain configured separately.
 
