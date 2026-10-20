@@ -315,6 +315,10 @@ Validation: full Python suite, standalone frontend checks including `tests/test_
 
 All seven HTML pages declare `/static/icon-192.png` as their PNG favicon, reusing the existing barbell app icon. `/favicon.ico` serves the same file with `image/png` and revalidation headers for browsers requesting the conventional fallback path. The manifest and Apple home-screen icon links retain their existing behavior.
 
+## Mobile RPE entry (2026-10-20)
+
+The log's compact RPE button displays a gauge for an unrated set and the numeric value after selection. Clear restores the gauge. Accessible button labels retain the RPE value; the icon is decorative. Fine-pointer typing remains available above 600px; narrow layouts use the picker button.
+
 
 ## Scoped BS-Bridge RPE history (2026-10-20)
 

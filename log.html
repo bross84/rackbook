@@ -101,10 +101,12 @@
     /* the RPE box is the same box as the weight and reps boxes */
     .set .rpebtn { width: 100%; height: 34px; min-height: 34px; background: var(--chip); border-radius: 8px; text-align: center; font-size: 16px; font-weight: 500; color: var(--text); }
     .set .rpebtn.none { color: var(--muted); font-weight: 400; }
+    .rpegauge { display: none; }
+    .rpebtn.none .rpegauge { display: inline-block; width: 21px; height: 21px; vertical-align: middle; }
     .set.done .rpebtn { background: transparent; }
     .rpecontrol { min-width: 0; }
     .set .rpeinput, .rpearrow { display: none; }
-    @media (hover: hover) and (pointer: fine) {
+    @media (min-width: 601px) and (hover: hover) and (pointer: fine) {
       .cols, .set { grid-template-columns: 20px 42px minmax(38px,1fr) 28px minmax(30px,1fr) 60px 30px 36px 26px; }
       .rpecontrol { display: flex; align-items: center; border-radius: 8px; background: var(--chip); }
       .set.done .rpecontrol { background: transparent; }
@@ -112,6 +114,7 @@
       .set .rpeinput[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--danger); }
       .set .rpebtn { width: 18px; flex: 0 0 18px; color: var(--muted); }
       .rpevalue { display: none; }
+      .rpebtn.none .rpegauge { display: none; }
       .rpearrow { display: inline; }
     }
     .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
@@ -476,12 +479,15 @@
     picker.setAttribute("aria-label", "Choose RPE"); picker.setAttribute("aria-haspopup", "dialog");
     picker.title = "Open RPE picker";
     const label = el("span", "rpevalue"), arrow = el("span", "rpearrow", "▾");
-    picker.append(label, arrow);
+    const gauge = el("span", "rpegauge"); gauge.setAttribute("aria-hidden", "true");
+    gauge.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 17a9 9 0 0 1 18 0"/><path d="m13.5 14.5 4-4"/><circle cx="12" cy="16" r="2"/></svg>';
+    picker.append(label, gauge, arrow);
     let committed = "";
     control.show = (v) => {
       committed = v || ""; input.value = committed;
       input.setCustomValidity(""); input.removeAttribute("aria-invalid");
-      label.textContent = committed || "–"; picker.classList.toggle("none", !committed);
+      label.textContent = committed; picker.classList.toggle("none", !committed);
+      picker.setAttribute("aria-label", committed ? "RPE " + committed + ". Change RPE" : "Choose RPE");
     };
     input.addEventListener("input", () => {
       const raw = input.value.trim().replace(",", ".");
@@ -490,7 +496,8 @@
       if (!valid) { input.setAttribute("aria-invalid", "true"); return; }
       input.removeAttribute("aria-invalid");
       committed = raw === "" ? "" : String(Number(raw));
-      label.textContent = committed || "–"; picker.classList.toggle("none", !committed);
+      label.textContent = committed; picker.classList.toggle("none", !committed);
+      picker.setAttribute("aria-label", committed ? "RPE " + committed + ". Change RPE" : "Choose RPE");
       onChange(committed);
     });
     input.addEventListener("blur", () => { if (input.checkValidity()) input.value = committed; });

@@ -41,6 +41,10 @@ function type(value) { input.value = value; input.events.input(); }
 function key(key) { input.events.keydown({ key, preventDefault() {} }); }
 
 assert.equal(input.value, '7');
+assert.equal(picker.children[0].textContent, '7');
+assert.equal(picker.attrs['aria-label'], 'RPE 7. Change RPE');
+assert.equal(picker.children[1].attrs['aria-hidden'], 'true');
+assert.match(picker.children[1].innerHTML, /<svg/);
 type('8'); type('8.'); type('8.5');
 assert.equal(input.value, '8.5');
 assert.equal(changes.at(-1), '8.5');
@@ -73,6 +77,8 @@ assert.equal(picker.focused, true);
 picker.events.click(); picked('');
 assert.equal(input.value, '');
 assert.equal(changes.at(-1), '');
+assert.equal(picker.children[0].textContent, '');
+assert.equal(picker.attrs['aria-label'], 'Choose RPE');
 
 // The save path must reject an invalid visible edit rather than save its older value.
 const row = { done: true, type: 'normal', kg: '100', reps: '3', rpe: '8', arpe: '7.5' };
