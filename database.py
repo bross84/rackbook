@@ -212,6 +212,17 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_logged_sets_exercise ON logged_sets (exercise_template_id, workout_start);
 
+            CREATE TABLE IF NOT EXISTS rpe_history_imports (
+                hevy_workout_id TEXT NOT NULL,
+                exercise_template_id TEXT NOT NULL,
+                exercise_title TEXT NOT NULL,
+                workout_title TEXT NOT NULL,
+                workout_start TEXT NOT NULL,
+                sets_json TEXT NOT NULL,
+                imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (hevy_workout_id, exercise_template_id)
+            );
+
             CREATE TABLE IF NOT EXISTS body_measurements (
                 date TEXT PRIMARY KEY,
                 weight_kg REAL NOT NULL,

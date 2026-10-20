@@ -151,6 +151,8 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
     }
+    #importBridge { font: inherit; min-height: 44px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+    #importBridge:disabled { opacity: .6; cursor: default; }
   </style>
 </head>
 <body>
@@ -160,6 +162,13 @@
     <nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts" aria-current="page">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <div id="status"></div>
+  <details class="card" style="padding:14px 16px;margin-bottom:16px">
+    <summary>BS-Bridge history</summary>
+    <p class="note">Import only BS-Bridge workouts: low-bar squat and paused high-bar squat → Squat; close-grip bench → Bench; conventional deadlift → Deadlift. Other movements and programs are excluded.</p>
+    <p class="note">Original dates and exact Rackbook ratings are kept. Missing historical RPE stays unknown. Each movement in each workout gets its own fitted strength reference. Repeating the import does not duplicate sets.</p>
+    <button id="importBridge" type="button">Import BS-Bridge history</button>
+    <p id="importStatus" class="note" role="status"></p>
+  </details>
   <div class="lifts" id="lifts" role="group" aria-label="Lift"></div>
   <div id="view"></div>
 </main>
@@ -183,14 +192,14 @@
     box.replaceChildren();
     if (msg) box.append(el("div", "error", msg));
   }
-  async function api(path) {
-    const res = await fetch(path);
+  async function api(path, options) {
+    const res = await fetch(path, options);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.detail || "Something went wrong (" + res.status + ").");
     return body;
   }
   const pct = (f) => (f * 100).toFixed(1);
-  const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); };
+  const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); };
 
   // Squat, bench and deadlift each get a table of their own; General is the table every other movement shares.
   function renderLifts() {
@@ -217,11 +226,11 @@
     if (data.general) {
       sum.append("The table every other movement uses (rows, presses, accessories and so on). Squat, bench and deadlift each have their own tab; nothing is logged against this one.");
     } else if (data.nothingLogged) {
-      sum.append("Nothing logged yet for " + data.title + ". Save a workout with an RPE on its working sets and a TS set, and this fills in.");
+      sum.append("Nothing logged yet for " + data.title + ". Import BS-Bridge history, or save working sets with an RPE. A TS marker is not required.");
     } else if (data.cells.length === 0) {
       sum.append("Not enough yet to read these sets. A table needs at least one workout with sets at clearly different effort, such as a single and sets of five at lower RPEs. Every set counts, the TS included, and nothing here comes from the table in use.");
     } else {
-      sum.append("Each workout gets its own e1RM fitted from its own sets, so nothing is measured against a number borrowed from the table. ");
+      sum.append("Each movement in each workout gets its own fitted e1RM, so older strength levels and squat variations are normalized separately. ");
     }
     if (!data.general && !data.nothingLogged) {
       sum.append(data.sets_used + (data.sets_used === 1 ? " set" : " sets") + " used");
@@ -229,6 +238,12 @@
       sum.append(".");
     }
     card.append(sum);
+    if (data.sources?.length) {
+      const sourceList = el("ul", "note");
+      for (const source of data.sources) sourceList.append(el("li", null,
+        source.title + ": " + source.local_sets + " exact local sets + " + source.imported_sets + " imported sets"));
+      card.append(sourceList);
+    }
 
     if (!data.general && !data.nothingLogged && data.gate) {
       const g = data.gate, gp = el("p", "gate");
@@ -239,7 +254,7 @@
         return span;
       };
       if (g.passed) {
-        gp.append(el("b", "ok", "Estimated cells are on. "), "This lift has enough data (" + g.sets + " sets, " + g.workouts + " workouts, " + g.k_span.toFixed(1) + " reps of effort), so cells you haven't hit are interpolated between the efforts your sets measured, never from the table in use. They stay empty past the hardest and easiest effort you've logged.");
+        gp.append(el("b", "ok", "Estimated cells are on. "), "This lift has enough data (" + g.sets + " sets, " + g.workouts + " workouts, " + g.k_span.toFixed(1) + " reps of effort), so cells you haven't hit are interpolated between the efforts your sets measured, never from the table in use. The RPE 10 single anchors 100%; cells beyond the easiest measured effort stay empty.");
       } else {
         gp.append("Estimated cells appear once there's enough data: ", part(g.sets, g.min_sets, "sets", String), ", ", part(g.workouts, g.min_workouts, "workouts", String), ", ", part(Math.min(g.k_span, g.min_k_span), g.min_k_span, "reps of effort covered", (v) => String(+v.toFixed(1))), ".");
       }
@@ -264,7 +279,7 @@
     for (let r = 10; r >= 5; r -= 0.5) rpes.push(r);
     for (const c of data.cells) if (!rpes.includes(c.rpe)) rpes.push(c.rpe);
     rpes.sort((a, b) => b - a);
-    const maxReps = Math.max(10, ...data.cells.map((c) => c.reps));
+    const maxReps = Math.max(10, ...data.cells.map((c) => c.reps), ...(data.estimated || []).map(c => c.reps));
 
     const t = el("table");
     const head = el("tr");
@@ -283,7 +298,7 @@
           td.className = c.chart != null ? band(diff) : "";
           td.append(el("div", "v", pct(c.observed)));
           td.append(el("div", "s", (c.chart != null ? (diff >= 0 ? "+" : "−") + (Math.abs(diff) * 100).toFixed(1) + " · " : "") + "n" + c.n + (c.ts ? " · TS" : "")));
-          td.title = "Your sets: " + pct(c.observed) + "% of each workout's fitted e1RM (" + c.n + (c.n === 1 ? " set" : " sets") + (c.ts ? ", including your TS" : "") + (c.chart != null ? "). Table in use: " + pct(c.chart) + "%." : ").");
+          td.title = "Your sets: " + pct(c.observed) + "% of each movement-session's fitted e1RM (" + c.n + (c.n === 1 ? " set" : " sets") + (c.ts ? ", including your TS" : "") + (c.chart != null ? "). Table in use: " + pct(c.chart) + "%." : ").");
         } else if (est) {
           td.className = "est";
           td.append(el("div", "v", pct(est.estimated)), el("div", "s", "est"));
@@ -314,7 +329,7 @@
       legend.append(item);
     }
     card.append(legend);
-    card.append(el("p", "note", "Each filled cell is the average of your sets at that RPE and reps, as a share of each workout's fitted e1RM, with the gap to the table in use and how many sets it rests on (n). Higher than the table means you can do more than it says at that RPE. Warm-ups and drop sets are left out; the TS counts like any other set. A set of 5 at RPE 7 is as hard as 8 reps at RPE 10, so sets at different RPEs and reps all inform the same curve. A cell on one or two sets is a hint, not a result."));
+    card.append(el("p", "note", "Each filled cell is the average of your sets at that RPE and reps, as a share of each movement-session's fitted e1RM, with the gap to the table in use and how many sets it rests on (n). Higher than the table means you can do more than it says at that RPE. Warm-ups and drop sets are left out; the TS counts like any other set. A set of 5 at RPE 7 is as hard as 8 reps at RPE 10, so sets at different RPEs and reps all inform the same curve. A cell on one or two sets is a hint, not a result."));
     view.append(card);
     if (!data.general && !data.nothingLogged) view.append(renderFit(data.fit));
   }
@@ -337,23 +352,24 @@
 
     const t = el("table");
     const head = el("tr");
-    for (const h of ["Workout", "Fitted e1RM", "From the TS", "Gap"]) head.append(el("th", null, h));
+    const compareTs = fit.sessions.some(ss => ss.table_e1rm_lb != null);
+    for (const h of ["Workout", "Movement", "Fitted e1RM", ...(compareTs ? ["From the TS", "Gap"] : [])]) head.append(el("th", null, h));
     t.append(head);
     for (const ss of fit.sessions) {
       const row = el("tr");
       const lb = Math.round(ss.e1rm_lb), kg = Math.round(ss.e1rm_lb / LB_PER_KG);
-      row.append(el("td", null, fmtDate(ss.workout_start)), el("td", null, lb + " lb · " + kg + " kg"));
-      if (ss.table_e1rm_lb != null) {
+      row.append(el("td", null, fmtDate(ss.workout_start)), el("td", null, ss.exercise_title || "–"), el("td", null, lb + " lb · " + kg + " kg"));
+      if (compareTs && ss.table_e1rm_lb != null) {
         const gap = ss.e1rm_lb - ss.table_e1rm_lb;
         row.append(el("td", null, Math.round(ss.table_e1rm_lb) + " lb"), el("td", null, (gap >= 0 ? "+" : "−") + Math.abs(Math.round(gap)) + " lb"));
-      } else {
+      } else if (compareTs) {
         row.append(el("td", null, "–"), el("td", null, "–"));
       }
       t.append(row);
     }
     card.append(t);
-    card.append(el("p", "note", "Fitted on " + fit.sets_fitted + " sets in " + fit.informative_sessions + (fit.informative_sessions === 1 ? " workout" : " workouts") + ", typically within " + (fit.rms_error * 100).toFixed(1) + "% of the line. " +
-      "\"From the TS\" is the e1RM the table gives for your TS; the gap is how much of that number is the table's own assumption. All sets count here, the TS included. " +
+    card.append(el("p", "note", "Fitted on " + fit.sets_fitted + " sets in " + fit.informative_sessions + (fit.informative_sessions === 1 ? " movement-session" : " movement-sessions") + ", typically within " + (fit.rms_error * 100).toFixed(1) + "% of the line. " +
+      "Every movement and workout has its own strength reference. These are fitted estimates for those sessions, not tested maxes or today's max. All qualifying sets count, including marked TS sets. " +
       "It assumes a straight line from a true RPE 10 single at 100%, and one workout is a rough guide: the slope firms up as sessions with a spread of reps and RPEs come in."));
     return card;
   }
@@ -366,7 +382,7 @@
     if (!lift) { showError(""); renderTable({ general: true, cells: [] }); return; }
     if (!lift.exercise_template_id) { showError(""); renderTable({ nothingLogged: true, title: lift.title, cells: [] }); return; }
     try {
-      const data = await api("/rpe-observed/" + encodeURIComponent(lift.exercise_template_id));
+      const data = await api("/rpe-observed/group/" + encodeURIComponent(key));
       if (mine !== loadId) return;
       showError("");
       renderTable(data);
@@ -374,6 +390,21 @@
       if (mine === loadId) showError(err.message);
     }
   }
+
+  $("importBridge").addEventListener("click", async () => {
+    const button = $("importBridge"), message = $("importStatus");
+    button.disabled = true;
+    message.textContent = "Reading BS-Bridge history…";
+    try {
+      const result = await api("/rpe-history/import-bs-bridge", {method: "POST"});
+      message.textContent = "Imported " + result.sets_imported + " rated sets from " + result.sessions_imported +
+        " movement-sessions. Kept " + result.local_sessions_preserved + " exact local sessions; " +
+        result.sessions_already_imported + " were already imported.";
+      lifts = await api("/rpe-observed");
+      await select(current || "squat");
+    } catch (err) { message.textContent = err.message + " You can retry; existing sets are preserved."; }
+    finally { button.disabled = false; }
+  });
 
   async function init() {
     try {

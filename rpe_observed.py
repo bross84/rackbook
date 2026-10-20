@@ -50,14 +50,17 @@ def _usable(sets: list[dict[str, Any]]) -> list[dict[str, Any]]:
         out.append({
             "start": s["workout_start"], "weight": float(s["weight_kg"]), "reps": int(s["reps"]),
             "rpe": float(s["rpe"]), "k": _k(int(s["reps"]), float(s["rpe"])), "ts": bool(s["is_ts"]),
+            "workout": s.get("hevy_workout_id") or s["workout_start"],
+            "session": (s.get("hevy_workout_id") or s["workout_start"], s.get("exercise_template_id", "")),
+            "exercise_title": s.get("exercise_title"),
         })
     return out
 
 
-def _by_workout(use: list[dict[str, Any]]) -> dict[str, list[tuple[float, float]]]:
-    out: dict[str, list[tuple[float, float]]] = defaultdict(list)
+def _by_workout(use: list[dict[str, Any]]) -> dict[tuple[str, str], list[tuple[float, float]]]:
+    out: dict[tuple[str, str], list[tuple[float, float]]] = defaultdict(list)
     for u in use:
-        out[u["start"]].append((u["weight"], u["k"]))
+        out[u["session"]].append((u["weight"], u["k"]))
     return out
 
 
@@ -73,7 +76,7 @@ def _solve(slope: float, pts: list[tuple[float, float]]):
     return mean, sum((x - mean) ** 2 for x in logs)
 
 
-def _fit_slope(workouts: dict[str, list[tuple[float, float]]]):
+def _fit_slope(workouts: dict[tuple[str, str], list[tuple[float, float]]]):
     """(sum of squared misses, slope, number of sets fitted, number of workouts that pin it), or None.
     Only workouts with sets at two or more different k say anything about the slope."""
     informative = {start: pts for start, pts in workouts.items() if len({k for _, k in pts}) > 1}
@@ -124,7 +127,7 @@ def _interp(curve: list[tuple[float, float]], k: float) -> float | None:
     return curve[-1][1]
 
 
-def _refine(workouts: dict[str, list[tuple[float, float]]], slope: float, rounds: int = 60):
+def _refine(workouts: dict[tuple[str, str], list[tuple[float, float]]], slope: float, rounds: int = 60):
     """Each workout's e1RM (kg) and the curve [(k, share)] drawn through the sets, pinned at (1, 100%)."""
     e1rm = {}
     for start, pts in workouts.items():
@@ -166,7 +169,7 @@ def build_observed(sets: list[dict[str, Any]], ts_history: list[dict[str, Any]],
     gate = {
         "passed": False,
         "sets": len(use), "min_sets": MIN_SETS,
-        "workouts": len(workouts), "min_workouts": MIN_WORKOUTS,
+        "workouts": len({u["workout"] for u in use}), "min_workouts": MIN_WORKOUTS,
         "k_span": (max(ks) - min(ks)) if ks else 0.0, "min_k_span": MIN_K_SPAN,
     }
     fitted = _fit_slope(workouts)
@@ -179,7 +182,7 @@ def build_observed(sets: list[dict[str, Any]], ts_history: list[dict[str, Any]],
     ts_count: dict[tuple[float, int], int] = defaultdict(int)
     for u in use:
         key = (u["rpe"], u["reps"])
-        buckets[key].append(u["weight"] / e1rm[u["start"]])
+        buckets[key].append(u["weight"] / e1rm[u["session"]])
         ts_count[key] += 1 if u["ts"] else 0
     result["sets_used"] = len(use)
     result["ts_sets"] = sum(ts_count.values())
@@ -188,7 +191,7 @@ def build_observed(sets: list[dict[str, Any]], ts_history: list[dict[str, Any]],
         for (rpe, reps), v in sorted(buckets.items(), key=lambda kv: (-kv[0][0], kv[0][1]))
     ]
 
-    gate["passed"] = len(use) >= MIN_SETS and len(workouts) >= MIN_WORKOUTS and gate["k_span"] >= MIN_K_SPAN
+    gate["passed"] = len(use) >= MIN_SETS and gate["workouts"] >= MIN_WORKOUTS and gate["k_span"] >= MIN_K_SPAN
     if gate["passed"]:
         for rpe in EST_RPES:
             for reps in EST_REPS:
@@ -205,15 +208,18 @@ def fit_curve(sets: list[dict[str, Any]], ts_history: list[dict[str, Any]], char
     The straight-line slope (fraction of the max lost per extra rep to failure) and each workout's e1RM that best fit the
     sets, or None when no workout has sets at two different k. Alongside, the table in use's slope and the e1RM the TS gave.
     """
-    workouts = _by_workout(_usable(sets))
+    use = _usable(sets)
+    workouts = _by_workout(use)
     fitted = _fit_slope(workouts)
     if fitted is None:
         return None
     sse, slope, fitted_sets, informative = fitted
     anchors = sorted(ts_history, key=lambda t: t["set_at"])
     sessions = []
-    for start in sorted(workouts):
-        solved = _solve(slope, workouts[start])
+    metadata = {u["session"]: u for u in use}
+    for session in sorted(workouts, key=lambda key: (metadata[key]["start"], key)):
+        start = metadata[session]["start"]
+        solved = _solve(slope, workouts[session])
         if solved is None:
             continue
         table = None
@@ -223,9 +229,10 @@ def fit_curve(sets: list[dict[str, Any]], ts_history: list[dict[str, Any]], char
             table = t
         sessions.append({
             "workout_start": start,
+            "exercise_title": metadata[session]["exercise_title"],
             "e1rm_lb": math.exp(solved[0]) * LB_PER_KG,
             "table_e1rm_lb": table["e1rm_lb"] if table else None,
-            "sets": len(workouts[start]),
+            "sets": len(workouts[session]),
         })
     low, high = chart(10.0, 2), chart(10.0, 10)
     return {

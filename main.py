@@ -28,6 +28,7 @@ import program_parser
 import progress
 import refs_store
 import rpe_observed
+import rpe_history
 import set_log
 import stress_index
 import stress_service
@@ -553,6 +554,7 @@ class DataGate(BaseModel):
 
 class FitSession(BaseModel):
     workout_start: str
+    exercise_title: str | None = None
     e1rm_lb: float  # the e1RM that workout's sets point to along the fitted curve
     table_e1rm_lb: float | None = None  # the e1RM the TS gave from the table in use
     sets: int
@@ -567,6 +569,21 @@ class CurveFit(BaseModel):
     sessions: list[FitSession]
 
 
+class RpeSource(BaseModel):
+    exercise_template_id: str
+    title: str
+    local_sets: int
+    imported_sets: int
+
+
+class RpeImportResult(BaseModel):
+    workouts_scanned: int
+    sessions_imported: int
+    sets_imported: int
+    local_sessions_preserved: int
+    sessions_already_imported: int
+
+
 class ObservedTable(BaseModel):
     exercise_template_id: str
     title: str | None = None
@@ -576,6 +593,7 @@ class ObservedTable(BaseModel):
     estimated: list[EstimatedCell] = []  # only once the gate is passed
     gate: DataGate
     fit: CurveFit | None = None  # a table-free fit to all the sets; None until a workout has sets at two different k
+    sources: list[RpeSource] = []
 
 
 @app.get("/rpe-charts")
@@ -585,9 +603,18 @@ def rpe_charts_page():
 
 @app.get("/rpe-observed", response_model=list[ObservedLift])
 def list_observed_lifts():
-    """The lifts that get an RPE table of their own: squat, bench and deadlift. Everything else shares the general table."""
-    titles = {key: progress.LIFT_TITLES[key] for key in ("squat", "bench", "deadlift")}
-    return set_log.main_lifts(titles)
+    return rpe_history.list_lifts()
+
+
+@app.post("/rpe-history/import-bs-bridge", response_model=RpeImportResult)
+def import_bs_bridge_rpe_history():
+    prepared = _call_hevy(rpe_history.fetch_bridge)
+    return rpe_history.store_import(prepared)
+
+
+@app.get("/rpe-observed/group/{lift}", response_model=ObservedTable)
+def get_observed_group(lift: Literal["squat", "bench", "deadlift"]):
+    return rpe_history.build_group(lift, get_rpe_percentage)
 
 
 @app.get("/rpe-observed/{exercise_template_id}", response_model=ObservedTable)

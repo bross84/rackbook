@@ -67,7 +67,9 @@ Routes used by the log, RPE and progress pages (the legacy planner has many more
 | `GET /movement-stress/{template_id}/history?days=56` | Saved-session stress history and current rolling totals; days=0 means all available history |
 | `GET/PUT /exercise-refs[/{template_id}]` | Per-movement settings |
 | `GET /rpe-table` | The RPE table in use, as `[rpe, reps, fraction]` rows |
-| `GET /rpe-observed`, `GET /rpe-observed/{template_id}` | The lifts with RPE tables, and one lift's observed cells, estimated cells, data gate and curve fit |
+| `GET /rpe-observed`, `GET /rpe-observed/group/{lift}` | Grouped Squat/Bench/Deadlift counts and charts; Squat includes low-bar and paused high-bar |
+| `GET /rpe-observed/{template_id}` | Existing exact-movement local chart retained for compatibility |
+| `POST /rpe-history/import-bs-bridge` | Explicit chart-only import of the four approved movements from BS-Bridge history; no Hevy writes |
 | `GET /progress/data?lift=` | A main lift's series for the Progress page |
 | `GET /exercises`, `POST /exercises/sync` | The cached Hevy exercise list |
 | `GET /settings`, `POST /settings/api-key` | Whether a Hevy key is set (never returns it), and saving it (204, empty body) |
@@ -91,7 +93,8 @@ Routes used by the log, RPE and progress pages (the legacy planner has many more
 | `refs_store.py` | Per-movement settings (`exercise_refs`) |
 | `set_log.py` | The local record of every set (`logged_sets`), and the lookups the RPE page uses |
 | `stress_index.py`, `stress_service.py` | Pure, versioned stress calculation and rolling windows; bounded 60-second Hevy history cache |
-| `rpe_observed.py` | Pure: RPE tables built from logged sets, the data gate, estimated cells, curve fit |
+| `rpe_observed.py` | Pure: RPE table fit and estimates; separate strength reference per movement/workout |
+| `rpe_history.py` | Scoped BS-Bridge history import, local-record precedence, chart sources and grouped chart services |
 | `progress.py`, `strength_score.py`, `body_weight.py` | The Progress page; `LIFT_TITLES` in `progress.py` maps squat/bench/deadlift/press to Hevy exercise titles |
 | `log.html` | The log page. All its CSS and JS are inline |
 | `mesocycles.py`, `mesocycles.html` | Typed plan models, local storage/completion services, and self-contained mesocycle editor |
@@ -151,7 +154,7 @@ The aim: a personal RPE table for squat, bench and deadlift (and the general tab
 How it works, in order:
 
 1. Sets used: not warm-ups or drop sets, with a weight, reps and an RPE. Every set counts, **the TS included**; no set is a reference.
-2. Each workout gets its own e1RM. A straight line in k, `f(k) = 1 − slope·(k − 1)` (a true RPE 10 single = 100%), is fitted to all sets; then the curve is redrawn through the sets themselves (average share per k, kept non-increasing) and the e1RMs refitted, a few rounds. The overall scale is fixed only by the straight-line fit and that 100% pin.
+2. Each movement in each workout gets its own e1RM. A straight line in k, `f(k) = 1 − slope·(k − 1)` (a true RPE 10 single = 100%), is fitted to all sets; then the curve is redrawn through the sets themselves (average share per k, kept non-increasing) and the e1RMs refitted, a few rounds. The overall scale is fixed only by the straight-line fit and that 100% pin.
 3. A cell = the average share (set weight ÷ its workout's fitted e1RM) of the sets at that exact RPE and reps, with the count `n` and the gap to the table in use.
 4. **Data gate** per lift (constants in `rpe_observed.py`): `MIN_SETS = 15`, `MIN_WORKOUTS = 3`, `MIN_K_SPAN = 4.0` reps of effort between the hardest and easiest sets. Until it is passed no cell is estimated and the page shows progress toward it.
 5. Once passed, cells with no sets are **estimated** by interpolating the curve (shown as `est`), never from the table in use, and left empty past the hardest and easiest effort logged.
@@ -310,3 +313,18 @@ Validation: full Python suite, standalone frontend checks including `tests/test_
 ## Browser favicon (2026-10-19)
 
 All seven HTML pages declare `/static/icon-192.png` as their PNG favicon, reusing the existing barbell app icon. `/favicon.ico` serves the same file with `image/png` and revalidation headers for browsers requesting the conventional fallback path. The manifest and Apple home-screen icon links retain their existing behavior.
+
+
+## Scoped BS-Bridge RPE history (2026-10-20)
+
+Approved source movements are low-bar squat with belt and paused high-bar squat (both contribute to Squat), close-grip barbell bench (Bench), and conventional deadlift with belt (Deadlift). Romanian/straight-leg deadlifts, overhead press, accessories and other movements are not included. Exact titles derive from the existing main-lift titles plus the explicitly approved paused high-bar title. An exercise ID discovered under an approved title retains its identity across historical renames (including the old paused-squat spelling “Pauses”); similar names with different IDs are not inferred.
+
+The RPE page's BS-Bridge history section offers an explicit import. `rpe_history.fetch_bridge` reads all Hevy workout pages and selects case-insensitive BS-Bridge title variants, including a space before numbering. No other program is imported. All pages must succeed before persistence begins. Only normal/failure sets with finite positive weight, positive integer reps and a recorded valid RPE qualify. Warm-ups, drop sets, unrated sets and invalid records are omitted without substituting an RPE. Import retains the original workout id/start and exercise id; historical TS markers are not invented.
+
+`rpe_history_imports` stores immutable chart-only snapshots keyed by `(hevy_workout_id, exercise_template_id)`. A transaction inserts missing snapshots; retries and concurrent requests cannot duplicate them. A local `logged_sets` snapshot for the same workout/movement prevents import and takes precedence at read time even if recorded after the import, or if unrated. Exact low-RPE records are not replaced with Hevy's blanks. No source workout, local set, TS/TM, soreness, fatigue record, movement reference or microcycle completion is rewritten. These imports feed only RPE charts. Local logs of the four approved movements continue contributing normally; the BS-Bridge title restriction applies to historical imports.
+
+The charts use `GET /rpe-observed/group/{lift}` and display usable local/imported counts by source movement. The older exact-movement endpoint retains its local-only behavior. The fit normalizes each `(workout id, exercise id)` independently, so two squat variants on one date never share an absolute max. Distinct workouts, rather than movement count, satisfy the existing three-workout gate. The 15-set and effort-spread gates remain unchanged. Fitted references list dates including years and movement names; pooled references are not compared against another movement's saved TS. Estimated rep columns through 12 are displayed when returned by the model.
+
+No age cutoff or age weighting is added: all qualifying BS-Bridge history contributes. A real tested max, if implemented later, must be dated and attached to the appropriate movement/session rather than used as a universal historical anchor. The current fit and its assumptions remain unchanged beyond separate movement/workout references.
+
+Validation: mocked paginated history, program/movement scope, historical rename, invalid/unrated exclusions, exact local precedence, idempotence, failed reads, independent same-day movement references and workout gates are covered in `tests/test_rpe_history.py`. Frontend import/refresh/source/estimate/error behavior: `node tests/test_rpe_chart_import.cjs`. Browser import and retry verified at phone width in a disposable DB with mocked responses; homelab import is a separate deployment action.
