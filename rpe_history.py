@@ -7,14 +7,9 @@ import math
 import re
 
 from database import get_db
-import progress
+import rpe_assignments
 import rpe_observed
 
-GROUPS = {
-    "squat": (progress.LIFT_TITLES["squat"], "Squat, High Bar, Paused"),
-    "bench": (progress.LIFT_TITLES["bench"],),
-    "deadlift": (progress.LIFT_TITLES["deadlift"],),
-}
 BRIDGE = re.compile(r"^\s*bs[\s-]*bridge(?=$|[\d\s._:-])", re.IGNORECASE)
 
 
@@ -29,9 +24,10 @@ def _usable(raw):
 
 
 def fetch_bridge(client):
-    """Read every page before any persistence; select only the four approved movements."""
+    """Read every page before persistence; only user-assigned exercise IDs qualify."""
     workouts = {}
-    approved_ids = {}
+    approved_ids = {template for template, assignment in rpe_assignments.all_assignments().items()
+                    if assignment['group'] is not None}
     scanned = set()
     page = 1
     while True:
@@ -50,12 +46,6 @@ def fetch_bridge(client):
                 raise ValueError("A BS-Bridge workout is missing its id or start time.")
             datetime.fromisoformat(start.replace("Z", "+00:00"))
             workouts[str(wid)] = workout
-            for ex in workout.get("exercises", []):
-                title, template = ex.get("title"), ex.get("exercise_template_id")
-                if any(title in titles for titles in GROUPS.values()):
-                    if not template:
-                        raise ValueError("A selected BS-Bridge movement is missing its exercise id.")
-                    approved_ids[template] = title
         if page >= pages:
             break
         page += 1
@@ -69,7 +59,7 @@ def fetch_bridge(client):
             # Same ID remains the same exercise after a rename; never infer a different ID from similar names.
             item = movements.setdefault(template, {
                 "hevy_workout_id": wid, "exercise_template_id": template,
-                "exercise_title": approved_ids[template], "workout_title": workout["title"],
+                "exercise_title": ex.get("title") or "Unknown exercise", "workout_title": workout["title"],
                 "workout_start": workout["start_time"], "sets": [],
             })
             item["sets"].extend({"type": s.get("type", "normal"), "weight_kg": s["weight_kg"],
@@ -110,22 +100,19 @@ def chart_sets():
         imported = [dict(r) for r in conn.execute("SELECT * FROM rpe_history_imports ORDER BY workout_start, exercise_template_id")]
     # Check all local rows, even if renamed or unrated, before using an imported snapshot.
     identities = {(r["hevy_workout_id"], r["exercise_template_id"]) for r in local}
-    approved_ids = {row["exercise_template_id"]: row["exercise_title"] for row in [*local, *imported]
-                    if any(row["exercise_title"] in titles for titles in GROUPS.values())}
-    out = {key: [] for key in GROUPS}
+    assignments = rpe_assignments.all_assignments()
+    out = {key: [] for key in rpe_assignments.LABELS}
     for row in local:
-        title = approved_ids.get(row["exercise_template_id"])
-        for key, titles in GROUPS.items():
-            if title in titles:
-                out[key].append({**row, "exercise_title": title, "source": "rackbook"})
+        group = assignments.get(row['exercise_template_id'], {}).get('group')
+        if group:
+            out[group].append({**row, "source": "rackbook"})
     for item in imported:
         if (item["hevy_workout_id"], item["exercise_template_id"]) in identities:
             continue
-        for key, titles in GROUPS.items():
-            if item["exercise_title"] not in titles:
-                continue
+        group = assignments.get(item['exercise_template_id'], {}).get('group')
+        if group:
             for i, s in enumerate(json.loads(item["sets_json"]), 1):
-                out[key].append({**{k: v for k, v in item.items() if k not in ("sets_json", "imported_at")},
+                out[group].append({**{k: v for k, v in item.items() if k not in ("sets_json", "imported_at")},
                                  "set_number": i, "set_type": s["type"], "weight_kg": s["weight_kg"],
                                  "reps": s["reps"], "rpe": s["rpe"], "is_ts": 0, "source": "hevy_import"})
     return out
@@ -136,11 +123,12 @@ def sources(rows):
     for row in rows:
         if not rpe_observed._usable([row]):
             continue
-        key = (row["exercise_template_id"], row["exercise_title"])
+        key = row["exercise_template_id"]
         counts[key][row["source"]] += 1
-    return [{"exercise_template_id": template, "title": title,
+    titles = {row['exercise_template_id']: row['exercise_title'] for row in rows}
+    return [{"exercise_template_id": template, "title": titles[template],
              "local_sets": count["rackbook"], "imported_sets": count["hevy_import"]}
-            for (template, title), count in sorted(counts.items(), key=lambda item: item[0][1])]
+            for template, count in sorted(counts.items(), key=lambda item: titles[item[0]])]
 
 
 def list_lifts():
@@ -148,9 +136,8 @@ def list_lifts():
     for key, rows in chart_sets().items():
         usable = rpe_observed._usable(rows)
         movement_sources = sources(rows)
-        primary = next((s for s in movement_sources if s["title"] == GROUPS[key][0]),
-                       movement_sources[0] if movement_sources else None)
-        result.append({"key": key, "title": GROUPS[key][0],
+        primary = movement_sources[0] if movement_sources else None
+        result.append({"key": key, "title": rpe_assignments.LABELS[key],
                        "exercise_template_id": primary["exercise_template_id"] if primary else None,
                        "sets": len(usable), "sessions": len({r["workout"] for r in usable})})
     return result
@@ -161,5 +148,5 @@ def build_group(key, chart):
     built = rpe_observed.build_observed(rows, [], chart)
     # A pooled chart cannot compare its variant-specific references to one movement's saved TS.
     built["fit"] = rpe_observed.fit_curve(rows, [], chart)
-    return {"exercise_template_id": "group:" + key, "title": GROUPS[key][0],
+    return {"exercise_template_id": "group:" + key, "title": rpe_assignments.LABELS[key],
             "sources": sources(rows), **built}

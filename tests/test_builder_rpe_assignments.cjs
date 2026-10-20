@@ -1,0 +1,27 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const html=fs.readFileSync(require('node:path').join(__dirname,'..','mesocycles.html'),'utf8');
+for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
+function el(tag,cls,text){return {tag,cls,text,children:[],attrs:{},events:{},append(...items){this.children.push(...items);},setAttribute(k,v){this.attrs[k]=v;},addEventListener(k,fn){this.events[k]=fn;}};}
+const movement={exercise_template_id:'same',title:'Whatever movement'};
+let remembers=0,renders=0;
+const context=vm.createContext({el,plan:{weeks:[{sessions:[{exercises:[movement]},{exercises:[structuredClone(movement)]}]}],rpe_assignments:{same:{group:'squat',revision:4},removed:{group:'bench',revision:2}}},remember:()=>remembers++,renderSession:()=>renders++});
+vm.runInContext(html.slice(html.indexOf('function rpeAssignmentField('),html.indexOf('function renderSession(')),context);
+let label=context.rpeAssignmentField(movement),select=label.children[0];
+assert.deepEqual(select.children.map(o=>o.value),['','squat','bench','deadlift','general']);
+assert.equal(select.value,'squat');
+assert.equal(select.attrs['aria-label'],'RPE chart for Whatever movement');
+select.value='general';select.events.change();
+assert.equal(context.plan.rpe_assignments.same.group,'general');
+assert.equal(context.plan.rpe_assignments.same.revision,4,'Retain revision until the server accepts the save');
+assert.equal(context.rpeAssignmentField(context.plan.weeks[0].sessions[1].exercises[0]).children[0].value,'general','Same movement shares one setting across days');
+select=context.rpeAssignmentField(movement).children[0];select.value='';select.events.change();
+assert.equal(context.plan.rpe_assignments.same.group,null);
+assert.match(label.children[1].text,/saved and future chart data/);
+assert.match(label.children[1].text,/Save plan to apply/);
+assert.equal(remembers,2);assert.equal(renders,2);
+assert.deepEqual(Object.keys(context.rpeAssignmentsForPlan()),['same'],'Removed movements are not sent as hidden assignment updates');
+const unassigned=context.rpeAssignmentField({exercise_template_id:'new',title:'New'}).children[0];
+assert.equal(unassigned.value,'','New movement names never infer a chart');
+console.log('Builder RPE choices, shared settings, exclusions, revisions and save scoping passed.');

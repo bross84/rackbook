@@ -29,6 +29,7 @@ import progress
 import refs_store
 import rpe_observed
 import rpe_history
+import rpe_assignments
 import set_log
 import stress_index
 import stress_service
@@ -519,8 +520,8 @@ def get_rpe_table():
 
 
 class ObservedLift(BaseModel):
-    key: Literal["squat", "bench", "deadlift"]
-    title: str  # the lift's Hevy exercise, as on the Progress page
+    key: rpe_assignments.ChartGroup
+    title: str  # chart group label
     exercise_template_id: str | None = None  # None until a set of it has been logged with an RPE
     sets: int  # working sets logged with an RPE
     sessions: int
@@ -606,6 +607,11 @@ def list_observed_lifts():
     return rpe_history.list_lifts()
 
 
+@app.get('/rpe-chart-assignments', response_model=dict[str, rpe_assignments.Assignment])
+def get_rpe_chart_assignments():
+    return rpe_assignments.all_assignments()
+
+
 @app.post("/rpe-history/import-bs-bridge", response_model=RpeImportResult)
 def import_bs_bridge_rpe_history():
     prepared = _call_hevy(rpe_history.fetch_bridge)
@@ -613,7 +619,7 @@ def import_bs_bridge_rpe_history():
 
 
 @app.get("/rpe-observed/group/{lift}", response_model=ObservedTable)
-def get_observed_group(lift: Literal["squat", "bench", "deadlift"]):
+def get_observed_group(lift: rpe_assignments.ChartGroup):
     return rpe_history.build_group(lift, get_rpe_percentage)
 
 

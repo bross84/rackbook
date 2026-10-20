@@ -164,7 +164,7 @@
   <div id="status"></div>
   <details class="card" style="padding:14px 16px;margin-bottom:16px">
     <summary>BS-Bridge history</summary>
-    <p class="note">Import only BS-Bridge workouts: low-bar squat and paused high-bar squat → Squat; close-grip bench → Bench; conventional deadlift → Deadlift. Other movements and programs are excluded.</p>
+    <p class="note">Import only BS-Bridge workouts. Movements contribute according to their saved RPE chart assignments in the Microcycle Builder. Movements set to “Do not contribute” are excluded.</p>
     <p class="note">Original dates and exact Rackbook ratings are kept. Missing historical RPE stays unknown. Each movement in each workout gets its own fitted strength reference. Repeating the import does not duplicate sets.</p>
     <button id="importBridge" type="button">Import BS-Bridge history</button>
     <p id="importStatus" class="note" role="status"></p>
@@ -205,7 +205,7 @@
   function renderLifts() {
     const box = $("lifts");
     box.replaceChildren();
-    for (const key of [...lifts.map((l) => l.key), "general"]) {
+    for (const key of [...new Set([...lifts.map((l) => l.key), "general"])]) {
       const l = lifts.find((x) => x.key === key);
       const b = el("button", null, LABELS[key]);
       b.type = "button"; b.setAttribute("aria-pressed", String(key === current));
@@ -223,16 +223,16 @@
     view.replaceChildren();
     const card = el("div", "card");
     const sum = el("p", "sum");
-    if (data.general) {
-      sum.append("The table every other movement uses (rows, presses, accessories and so on). Squat, bench and deadlift each have their own tab; nothing is logged against this one.");
+    if (data.referenceOnly) {
+      sum.append("General has no qualifying assigned sets yet. Assign movements in the Microcycle Builder to build it. The current loading table is shown below for reference.");
     } else if (data.nothingLogged) {
       sum.append("Nothing logged yet for " + data.title + ". Import BS-Bridge history, or save working sets with an RPE. A TS marker is not required.");
     } else if (data.cells.length === 0) {
       sum.append("Not enough yet to read these sets. A table needs at least one workout with sets at clearly different effort, such as a single and sets of five at lower RPEs. Every set counts, the TS included, and nothing here comes from the table in use.");
     } else {
-      sum.append("Each movement in each workout gets its own fitted e1RM, so older strength levels and squat variations are normalized separately. ");
+      sum.append("Each movement in each workout gets its own fitted e1RM, so strength changes and movement variations are normalized separately. ");
     }
-    if (!data.general && !data.nothingLogged) {
+    if (!data.referenceOnly && !data.nothingLogged) {
       sum.append(data.sets_used + (data.sets_used === 1 ? " set" : " sets") + " used");
       if (data.ts_sets) sum.append(" (" + data.ts_sets + " of them TS)");
       sum.append(".");
@@ -245,7 +245,7 @@
       card.append(sourceList);
     }
 
-    if (!data.general && !data.nothingLogged && data.gate) {
+    if (!data.referenceOnly && !data.nothingLogged && data.gate) {
       const g = data.gate, gp = el("p", "gate");
       const part = (have, need, label, fmt) => {
         const met = have >= need;
@@ -261,7 +261,7 @@
       card.append(gp);
     }
 
-    if (!data.general) {
+    if (!data.referenceOnly) {
       const lab = el("label", "show");
       const box = el("input"); box.type = "checkbox"; box.checked = showTable;
       box.addEventListener("change", () => {
@@ -303,7 +303,7 @@
           td.className = "est";
           td.append(el("div", "v", pct(est.estimated)), el("div", "s", "est"));
           td.title = "Estimated from your sets at nearby efforts: " + pct(est.estimated) + "%." + (est.chart != null ? " Table in use: " + pct(est.chart) + "%." : "");
-        } else if (chart != null && (showTable || data.general)) {
+        } else if (chart != null && (showTable || data.referenceOnly)) {
           td.className = "none";
           td.append(el("div", "v", pct(chart)));
           td.title = "Table in use: " + pct(chart) + "%. Nothing logged here yet.";
@@ -319,7 +319,7 @@
     card.append(scroll);
 
     const legend = el("div", "legend");
-    for (const [cls, text] of [["near", "within 1 point of the table"], ["off", "1 to 2.5 points off"], ["far", "more than 2.5 off"], ...(data.estimated && data.estimated.length ? [["est", "estimated from your other sets"]] : []), ...(showTable || data.general ? [["none", "the table in use (nothing logged here yet)"]] : [])]) {
+    for (const [cls, text] of [["near", "within 1 point of the table"], ["off", "1 to 2.5 points off"], ["far", "more than 2.5 off"], ...(data.estimated && data.estimated.length ? [["est", "estimated from your other sets"]] : []), ...(showTable || data.referenceOnly ? [["none", "the table in use (nothing logged here yet)"]] : [])]) {
       const item = el("span");
       const swatch = el("i"); swatch.className = "";
       swatch.style.background = cls === "none" || cls === "est" ? "transparent" : "var(--" + cls + "-bg)";
@@ -331,7 +331,7 @@
     card.append(legend);
     card.append(el("p", "note", "Each filled cell is the average of your sets at that RPE and reps, as a share of each movement-session's fitted e1RM, with the gap to the table in use and how many sets it rests on (n). Higher than the table means you can do more than it says at that RPE. Warm-ups and drop sets are left out; the TS counts like any other set. A set of 5 at RPE 7 is as hard as 8 reps at RPE 10, so sets at different RPEs and reps all inform the same curve. A cell on one or two sets is a hint, not a result."));
     view.append(card);
-    if (!data.general && !data.nothingLogged) view.append(renderFit(data.fit));
+    if (!data.referenceOnly && !data.nothingLogged) view.append(renderFit(data.fit));
   }
 
   // A fit that never uses the table's numbers: only that a set is as hard as a set to failure of reps + reps-in-reserve,
@@ -379,7 +379,7 @@
     try { localStorage.setItem(LIFT_KEY, key); } catch (e) { /* storage can be unavailable */ }
     renderLifts();
     const mine = ++loadId, lift = lifts.find((l) => l.key === key);
-    if (!lift) { showError(""); renderTable({ general: true, cells: [] }); return; }
+    if (!lift || (key === "general" && !lift.sets)) { showError(""); renderTable({ referenceOnly: true, cells: [] }); return; }
     if (!lift.exercise_template_id) { showError(""); renderTable({ nothingLogged: true, title: lift.title, cells: [] }); return; }
     try {
       const data = await api("/rpe-observed/group/" + encodeURIComponent(key));

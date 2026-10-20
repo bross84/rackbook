@@ -11,9 +11,13 @@ from fastapi.testclient import TestClient
 import main
 from database import get_db
 import rpe_history
+import rpe_assignments
 import rpe_observed
 import set_log
 
+
+TEST_GROUPS = {"squat": ("Squat, Low Bar w/ Belt", "Squat, High Bar, Paused"),
+               "bench": ("Bench Press - Close Grip (Barbell)",), "deadlift": ("Deadlift, Conv. w/ Belt",)}
 
 def exercise(title, template="sq", sets=None):
     return {"title": title, "exercise_template_id": template, "sets": sets if sets is not None else [
@@ -24,7 +28,7 @@ def exercise(title, template="sq", sets=None):
 
 def workout(wid="w1", title="BS-Bridge1.1.1", exercises=None):
     return {"id": wid, "title": title, "start_time": "2025-01-01T10:00:00Z",
-            "exercises": exercises if exercises is not None else [exercise(rpe_history.GROUPS["squat"][0])]}
+            "exercises": exercises if exercises is not None else [exercise(TEST_GROUPS["squat"][0])]}
 
 
 def client_for(workouts):
@@ -44,6 +48,9 @@ class RpeHistoryCase(unittest.TestCase):
         self.client = TestClient(main.app)
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
+        with closing(get_db()) as conn, conn:
+            rpe_assignments.save(conn, {template: rpe_assignments.Assignment(group=group)
+                for template, group in [("sq", "squat"), ("paused", "squat"), ("bench", "bench"), ("dead", "deadlift")]})
 
     def count(self, table):
         # Only fixed table names from the test, never request input.
@@ -59,7 +66,10 @@ class RpeHistoryCase(unittest.TestCase):
             "exercises": [{"title": title, "exercise_template_id": template, "sets": sets}]}, wid))
 
     def test_only_bridge_titles_and_four_approved_movements(self):
-        approved = [title for group in rpe_history.GROUPS.values() for title in group]
+        approved = [title for group in TEST_GROUPS.values() for title in group]
+        with closing(get_db()) as conn, conn:
+            rpe_assignments.save(conn, {str(i): rpe_assignments.Assignment(group=group)
+                for i, group in enumerate(["squat", "squat", "bench", "deadlift"])})
         all_ex = [exercise(title, str(i)) for i, title in enumerate(approved + [
             "Deadlift, Romanian w/Belt", "Straight Leg Deadlift", "Overhead Press (Barbell)", "Pendlay Row (Barbell)"])]
         workouts = [workout(str(i), title, all_ex) for i, title in enumerate([
@@ -87,7 +97,7 @@ class RpeHistoryCase(unittest.TestCase):
         self.assertEqual(3, prepared["workouts_scanned"])
 
     def test_historical_renames_match_the_same_approved_id_not_similar_names(self):
-        title = rpe_history.GROUPS["squat"][1]
+        title = TEST_GROUPS["squat"][1]
         fake = client_for([
             workout("older", exercises=[exercise("Squat, High Bar, Pauses", "paused"),
                                         exercise("Squat, High Bar, Pauses", "different")]),
@@ -96,7 +106,7 @@ class RpeHistoryCase(unittest.TestCase):
         prepared = rpe_history.fetch_bridge(fake)
         self.assertEqual(2, len(prepared["sessions"]))
         self.assertTrue(all(r["exercise_template_id"] == "paused" for r in prepared["sessions"]))
-        self.assertTrue(all(r["exercise_title"] == title for r in prepared["sessions"]))
+        self.assertEqual({"Squat, High Bar, Pauses", title}, {r["exercise_title"] for r in prepared["sessions"]})
 
     def test_empty_account_is_a_successful_no_op(self):
         fake = Mock()
@@ -109,7 +119,7 @@ class RpeHistoryCase(unittest.TestCase):
             {**valid, **change} for change in [{"rpe": None}, {"type": "warmup"}, {"type": "dropset"},
                 {"weight_kg": 0}, {"weight_kg": float("nan")}, {"reps": 0}, {"reps": 1.5},
                 {"rpe": 11}, {"rpe": True}, {"weight_kg": "100"}]]]
-        raw = workout(exercises=[exercise(rpe_history.GROUPS["bench"][0], "bench", sets)])
+        raw = workout(exercises=[exercise(TEST_GROUPS["bench"][0], "bench", sets)])
         prepared = rpe_history.fetch_bridge(client_for([raw]))
         self.assertEqual(2, len(prepared["sessions"][0]["sets"]))
         rpe_history.store_import(prepared)
@@ -119,7 +129,7 @@ class RpeHistoryCase(unittest.TestCase):
         self.assertEqual("2025-01-01T10:00:00Z", rows[0]["workout_start"])
 
     def test_retry_is_idempotent_and_preserves_exact_local_snapshot(self):
-        title = rpe_history.GROUPS["squat"][0]
+        title = TEST_GROUPS["squat"][0]
         self.local("w1", title, "sq", [{"weight_kg": 90, "reps": 5, "rpe": 5, "ts": True}])
         prepared = rpe_history.fetch_bridge(client_for([workout(), workout("older")]))
         first = rpe_history.store_import(prepared)
@@ -136,7 +146,7 @@ class RpeHistoryCase(unittest.TestCase):
     def test_local_snapshot_added_later_wins_even_when_unrated(self):
         prepared = rpe_history.fetch_bridge(client_for([workout()]))
         rpe_history.store_import(prepared)
-        self.local("w1", rpe_history.GROUPS["squat"][0], "sq", [{"weight_kg": 90, "reps": 5, "rpe": None}])
+        self.local("w1", TEST_GROUPS["squat"][0], "sq", [{"weight_kg": 90, "reps": 5, "rpe": None}])
         rows = rpe_history.chart_sets()["squat"]
         self.assertEqual(1, len(rows))
         self.assertIsNone(rows[0]["rpe"])
@@ -150,8 +160,8 @@ class RpeHistoryCase(unittest.TestCase):
         self.assertEqual(0, self.count("imports"))
 
     def test_api_uses_only_mocked_hevy_reads_and_chart_counts_include_paused_squats(self):
-        raw = workout(exercises=[exercise(rpe_history.GROUPS["squat"][0]),
-                                  exercise(rpe_history.GROUPS["squat"][1], "paused")])
+        raw = workout(exercises=[exercise(TEST_GROUPS["squat"][0]),
+                                  exercise(TEST_GROUPS["squat"][1], "paused")])
         fake = client_for([raw])
         with patch("main._call_hevy", side_effect=lambda fn: fn(fake)):
             response = self.client.post("/rpe-history/import-bs-bridge")

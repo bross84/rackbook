@@ -7,6 +7,8 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from database import get_db
+import rpe_assignments
+from rpe_assignments import Assignment
 
 
 class PlannedSet(BaseModel):
@@ -56,6 +58,7 @@ class PlanInput(BaseModel):
     notes: str = Field(default='', max_length=4000)
     weeks: list[PlannedWeek] = Field(min_length=1, max_length=1)
     revision: int = Field(default=0, ge=0)
+    rpe_assignments: dict[str, Assignment] = Field(default_factory=dict, max_length=420)
 
     @model_validator(mode='after')
     def unique_sessions(self):
@@ -67,6 +70,9 @@ class PlanInput(BaseModel):
         ids = [s.id for w in self.weeks for s in w.sessions]
         if len(ids) != len(set(ids)):
             raise ValueError('Workout identities must be unique')
+        movement_ids = {ex.exercise_template_id for w in self.weeks for s in w.sessions for ex in s.exercises}
+        if not set(self.rpe_assignments).issubset(movement_ids):
+            raise ValueError('RPE chart assignments must belong to movements in this microcycle')
         return self
 
 
@@ -102,7 +108,9 @@ def _row(conn, plan_id):
 
 
 def _view(conn, row):
-    return dict(json.loads(row['document']), id=row['id'], revision=row['revision'],
+    document = json.loads(row['document'])
+    ids = {ex['exercise_template_id'] for w in document['weeks'] for s in w['sessions'] for ex in s['exercises']}
+    return dict(document, id=row['id'], revision=row['revision'], rpe_assignments=rpe_assignments.read(conn, ids),
                 active=bool(row['active']), archived=bool(row['archived']),
                 completed=[dict(r) for r in conn.execute(
                     'SELECT session_id, hevy_workout_id, workout_start FROM mesocycle_completions WHERE mesocycle_id = ?', (row['id'],))])
@@ -165,7 +173,7 @@ def migrate_single_week_plans():
 
 
 def save_plan(data: PlanInput, plan_id=None):
-    document = data.model_dump(exclude={'revision'})
+    document = data.model_dump(exclude={'revision', 'rpe_assignments'})
     with get_db() as conn:
         conn.execute('BEGIN IMMEDIATE')
         if plan_id is None:
@@ -185,6 +193,10 @@ def save_plan(data: PlanInput, plan_id=None):
                     raise PlanError('Completed workouts are kept as planned. Duplicate one to make a new workout.')
             conn.execute('UPDATE mesocycles SET document = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
                          (json.dumps(document), plan_id))
+        try:
+            rpe_assignments.save(conn, data.rpe_assignments)
+        except ValueError as exc:
+            raise PlanError(str(exc))
         return _view(conn, _row(conn, plan_id))
 
 

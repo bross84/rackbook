@@ -239,6 +239,11 @@ class TestObservedRoutes(unittest.TestCase):
         entry = {"title": "Day", "start_time": start, "end_time": start,
                  "exercises": [{"exercise_template_id": template, "title": title, "sets": sets}]}
         set_log.record(set_log.rows_from_entry(entry, "h1"))
+        if title == "Squat, Low Bar w/ Belt":
+            from contextlib import closing
+            from database import get_db
+            with closing(get_db()) as conn, conn:
+                conn.execute("INSERT INTO rpe_chart_assignments VALUES (?, 'squat', 1) ON CONFLICT DO NOTHING", (template,))
 
     def test_lists_squat_bench_and_deadlift_with_what_is_logged_for_each(self):
         self._log("tpl-squat", "Squat, Low Bar w/ Belt", [
@@ -248,7 +253,7 @@ class TestObservedRoutes(unittest.TestCase):
         ])
         self._log("tpl-row", "Pendlay Row (Barbell)", [{"type": "normal", "weight_kg": 80, "reps": 5, "rpe": 7}])   # not a main lift: not listed
         got = self.client.get("/rpe-observed").json()
-        self.assertEqual(["squat", "bench", "deadlift"], [l["key"] for l in got])
+        self.assertEqual(["squat", "bench", "deadlift", "general"], [l["key"] for l in got])
         self.assertEqual(("tpl-squat", 2, 1), (got[0]["exercise_template_id"], got[0]["sets"], got[0]["sessions"]))
         self.assertEqual((None, 0, 0), (got[1]["exercise_template_id"], got[1]["sets"], got[1]["sessions"]))   # nothing logged yet
 

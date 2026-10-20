@@ -212,6 +212,12 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_logged_sets_exercise ON logged_sets (exercise_template_id, workout_start);
 
+            CREATE TABLE IF NOT EXISTS rpe_chart_assignments (
+                exercise_template_id TEXT PRIMARY KEY,
+                chart_group TEXT CHECK(chart_group IN ('squat', 'bench', 'deadlift', 'general')),
+                revision INTEGER NOT NULL DEFAULT 1
+            );
+
             CREATE TABLE IF NOT EXISTS rpe_history_imports (
                 hevy_workout_id TEXT NOT NULL,
                 exercise_template_id TEXT NOT NULL,
@@ -259,6 +265,8 @@ def init_db() -> None:
             pass  # column already exists or table didn't exist yet
 
         _seed_rpe_chart(conn)
+        from rpe_assignments import migrate_legacy
+        migrate_legacy(conn)
 
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
