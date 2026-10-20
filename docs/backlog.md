@@ -59,6 +59,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- One-time history import panel hidden (2026-10-20): the BS-Bridge import panel is hidden after the completed import. Existing imported sets and builder contribution settings continue working.
+
 - Mobile RPE gauge (2026-10-20): unrated sets show a compact gauge button; selecting an RPE replaces it with the number, and clearing restores the gauge. The existing picker and desktop typing remain. Verified selecting and clearing in a phone-width disposable browser preview, plus the RPE entry checks.
 
 - Builder RPE contribution settings (2026-10-20): each movement chooses Squat, Bench, Deadlift, General, or Do not contribute. Choices are shared by exact movement ID, saved with the plan, and apply to existing and future chart data. New movements start excluded; a one-time migration retains the original four approved choices. Completed days permit these settings while keeping prescriptions locked. Historical imports still include BS-Bridge only and now follow the saved assignments. General supports observed sets; no separate Press chart. Checked with 390 Python tests (one expected failure), all ten frontend suites, and a phone-width browser preview using disposable data and mocked Hevy.

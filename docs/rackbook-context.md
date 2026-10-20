@@ -322,6 +322,8 @@ The log's compact RPE button displays a gauge for an unrated set and the numeric
 
 ## Scoped BS-Bridge RPE history (2026-10-20)
 
+The one-time import is complete. Its panel is now hidden on the RPE page; imported snapshots continue contributing. The import service and hidden controls are retained for recovery.
+
 Movement contribution is configured in the Microcycle Builder: Squat, Bench, Deadlift, General, or Do not contribute. There is no separate Press chart; press can contribute to General. Assignments follow exact exercise IDs across historical renames, with no runtime title matching. New movements start excluded. A one-time migration preserves the four previously approved assignments from existing local/imported records: low-bar and paused high-bar squat to Squat, close-grip bench to Bench, conventional deadlift to Deadlift. It never overwrites an explicit choice or assigns newly encountered movements by name.
 
 The RPE page's BS-Bridge history section offers an explicit import. `rpe_history.fetch_bridge` reads all Hevy workout pages and selects case-insensitive BS-Bridge title variants, including a space before numbering. No other program is imported. All pages must succeed before persistence begins. Only normal/failure sets with finite positive weight, positive integer reps and a recorded valid RPE qualify. Warm-ups, drop sets, unrated sets and invalid records are omitted without substituting an RPE. Import retains the original workout id/start and exercise id; historical TS markers are not invented.

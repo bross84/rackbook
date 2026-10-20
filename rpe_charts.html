@@ -162,7 +162,7 @@
     <nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts" aria-current="page">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <div id="status"></div>
-  <details class="card" style="padding:14px 16px;margin-bottom:16px">
+  <details hidden class="card" style="padding:14px 16px;margin-bottom:16px">
     <summary>BS-Bridge history</summary>
     <p class="note">Import only BS-Bridge workouts. Movements contribute according to their saved RPE chart assignments in the Microcycle Builder. Movements set to “Do not contribute” are excluded.</p>
     <p class="note">Original dates and exact Rackbook ratings are kept. Missing historical RPE stays unknown. Each movement in each workout gets its own fitted strength reference. Repeating the import does not duplicate sets.</p>
@@ -226,7 +226,7 @@
     if (data.referenceOnly) {
       sum.append("General has no qualifying assigned sets yet. Assign movements in the Microcycle Builder to build it. The current loading table is shown below for reference.");
     } else if (data.nothingLogged) {
-      sum.append("Nothing logged yet for " + data.title + ". Import BS-Bridge history, or save working sets with an RPE. A TS marker is not required.");
+      sum.append("Nothing logged yet for " + data.title + ". Assign movements in the Microcycle Builder and save working sets with an RPE. A TS marker is not required.");
     } else if (data.cells.length === 0) {
       sum.append("Not enough yet to read these sets. A table needs at least one workout with sets at clearly different effort, such as a single and sets of five at lower RPEs. Every set counts, the TS included, and nothing here comes from the table in use.");
     } else {
