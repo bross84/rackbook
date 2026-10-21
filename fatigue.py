@@ -8,8 +8,10 @@ from math import isfinite
 from statistics import median
 
 from database import get_db
+from fatigue_context import build_context
+import fatigue_relationships
 
-MODEL_VERSION = "ts-trends-v2"
+MODEL_VERSION = "ts-trends-v3"
 BASELINE_SESSIONS = 12
 WINDOW_SESSIONS = 6
 MIN_PAIRED_PER_WINDOW = 5
@@ -35,8 +37,9 @@ def _change(before, after):
     return (after / before - 1) * 100 if before else None
 
 
-def analyze(ts_rows, set_rows, observations, measurements, *, pattern=None, now=None):
+def analyze(ts_rows, set_rows, observations, measurements, *, pattern=None, now=None, all_sets=None, relationships=None, exercise_template_id=None):
     now = now or datetime.now(timezone.utc)
+    exercise_template_id = exercise_template_id or next((r.get("exercise_template_id") for r in set_rows if r.get("exercise_template_id")), "__target__")
     # Normalize timestamps, use only saved data known as of assessment, one point/session.
     sessions = {}
     for row in set_rows:
@@ -112,6 +115,8 @@ def analyze(ts_rows, set_rows, observations, measurements, *, pattern=None, now=
         message="Collecting your baseline. Charts show your recorded history; interpretations start after 12 comparable marked-TS sessions with enough BW, soreness and set data.",
         reasons=[], e1rm_change_pct=None, bw_change_pct=None, relative_change_pct=None,
         sets_change=None, recent_sets=None, recent_soreness=None, points=points)
+    result["context"] = build_context(points, previous, recent, latest_ts,
+        set_rows if all_sets is None else all_sets, relationships or {}, exercise_template_id, pattern, now)
     if stale:
         result["message"] = "No movement session in 21 days. Start a fresh baseline when training resumes; previous observations remain on the charts."
     pattern_observations = [r for r in observations if pattern and _time(r.get("workout_start"))
@@ -179,6 +184,11 @@ def analyze(ts_rows, set_rows, observations, measurements, *, pattern=None, now=
         result.update(action="try_set", message="If more progress is the goal, consider one extra back-off set at one weekly exposure. Keep other variables consistent and reassess after three comparable TS sessions.")
     elif high:
         result["message"] = "Soreness is repeatedly moderate or severe. Hold volume and monitor performance before adding sets."
+    if result["action"] == "try_set":
+        if result["context"]["block_reasons"]:
+            result.update(action="hold", message=result["context"]["block_reasons"][0])
+        else:
+            result["context"]["extra_sets_eligible"] = True
     return result
 
 
@@ -187,11 +197,14 @@ def load(exercise_template_id, *, now=None):
     from progress import LIFT_TITLES
     with closing(get_db()) as conn:
         ts = [dict(r) for r in conn.execute("SELECT * FROM training_max_history WHERE exercise_template_id = ? ORDER BY set_at, id", (exercise_template_id,))]
-        sets = [dict(r) for r in conn.execute("SELECT * FROM logged_sets WHERE exercise_template_id = ? ORDER BY workout_start, id", (exercise_template_id,))]
+        all_sets = [dict(r) for r in conn.execute("SELECT * FROM logged_sets ORDER BY workout_start, id")]
+        sets = [row for row in all_sets if row["exercise_template_id"] == exercise_template_id]
+        relationships = fatigue_relationships.confirmed(conn)
         title_row = conn.execute("SELECT title FROM hevy_exercise_cache WHERE id = ?", (exercise_template_id,)).fetchone()
         title = title_row["title"] if title_row else next((r["exercise_title"] for r in reversed(sets) if r.get("exercise_title")), "")
         key = next((key for key, value in LIFT_TITLES.items() if value == title), None)
         pattern = "bench_press" if key in ("bench", "press") else key
         observations = [dict(r) for r in conn.execute("SELECT * FROM session_soreness")]
         measurements = [dict(r) for r in conn.execute("SELECT date, weight_kg FROM body_measurements ORDER BY date")]
-    return analyze(ts, sets, observations, measurements, pattern=pattern, now=now)
+    return analyze(ts, sets, observations, measurements, pattern=pattern, now=now,
+        all_sets=all_sets, relationships=relationships, exercise_template_id=exercise_template_id)

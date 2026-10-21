@@ -49,7 +49,7 @@ class FatigueRouteCase(unittest.TestCase):
         self.assertTrue(all(p["e1rm_lb"]==300 for p in result["points"]))
         response=self.client.get("/movement-fatigue/test-squat")
         self.assertEqual(response.status_code,200,response.text)
-        self.assertEqual(response.json()["model_version"],"ts-trends-v2")
+        self.assertEqual(response.json()["model_version"],"ts-trends-v3")
 
     def test_press_and_bench_share_soreness_not_performance(self):
         self.seed("press", "press")
@@ -60,3 +60,29 @@ class FatigueRouteCase(unittest.TestCase):
         self.assertEqual(press["recent_soreness"],1)
         self.assertTrue(all(p["e1rm_lb"]==300 for p in press["points"]))
         self.assertTrue(all(p["e1rm_lb"]==250 for p in bench["points"]))
+
+    def test_mapping_changes_recalculate_context_without_resetting_ts(self):
+        from datetime import timedelta
+        self.seed()
+        with closing(get_db()) as conn, conn:
+            conn.execute("""INSERT INTO logged_sets(exercise_template_id,exercise_title,hevy_workout_id,
+                workout_start,set_number,set_type,reps,rpe) VALUES ('leg','Leg press','related',?,1,'normal',10,8)""",
+                ((NOW-timedelta(days=1)).isoformat(),))
+        with patch("main.hevy_client.HevyClient") as hevy:
+            self.client.put('/fatigue/relationships/test-squat', json={'patterns':['squat']})
+            pending = main.fatigue.load('test-squat', now=NOW)
+            self.assertEqual(pending['action'], 'hold')
+            self.assertEqual(pending['context']['pending_mappings'][0]['exercise_template_id'], 'leg')
+            self.client.put('/fatigue/relationships/leg', json={'patterns':[]})
+            unrelated = main.fatigue.load('test-squat', now=NOW)
+            self.assertEqual(unrelated['action'], 'try_set')
+            self.client.put('/fatigue/relationships/leg', json={'patterns':['squat','deadlift']})
+            linked = main.fatigue.load('test-squat', now=NOW)
+            self.assertEqual(linked['action'], 'hold')
+            self.assertEqual(linked['points'][-1]['related_sets_7_before'], 1)
+            self.assertEqual(linked['collection'], unrelated['collection'])
+            self.assertEqual(linked['baseline_start'], unrelated['baseline_start'])
+            response = self.client.get('/movement-fatigue/test-squat')
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertIn('reference_exercise_days', response.json()['context'])
+        hevy.assert_not_called()

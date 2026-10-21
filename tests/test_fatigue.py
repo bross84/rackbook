@@ -24,7 +24,7 @@ def data(values, *, soreness=0, sets=4, bodyweight=True, spacing=3):
 
 class FatigueRulesCase(unittest.TestCase):
     def assess(self, args):
-        return analyze(*args, pattern="squat", now=NOW)
+        return analyze(*args, pattern="squat", now=NOW, relationships={"__target__":["squat"]})
 
     def test_need_twelve_comparable_ts_not_best_sets(self):
         args = data([300]*11)

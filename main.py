@@ -11,7 +11,7 @@ from cryptography.fernet import InvalidToken
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from database import get_db, get_rpe_percentage, init_db
 import soreness
 import fatigue
+import fatigue_relationships
 import body_weight
 import hevy_client
 import exercise_state
@@ -368,7 +369,68 @@ def stress_movements():
     return [{"id": r["id"], "title": r["title"], "primary_key": primary.get(r["title"])} for r in rows]
 
 
+FatiguePattern = Literal["squat", "bench_press", "deadlift"]
+
+
+class FatigueRelationshipInput(BaseModel):
+    patterns: list[FatiguePattern] = Field(max_length=3)
+
+    @field_validator("patterns")
+    @classmethod
+    def unique_patterns(cls, value):
+        if len(set(value)) != len(value):
+            raise ValueError("Choose each pattern at most once.")
+        return value
+
+
+class FatigueRelationship(FatigueRelationshipInput):
+    exercise_template_id: str
+    title: str
+    suggested_patterns: list[FatiguePattern]
+    reviewed: bool
+    reviewed_at: str | None
+
+
+@app.get("/fatigue/relationships", response_model=list[FatigueRelationship])
+def list_fatigue_relationships():
+    return fatigue_relationships.list_relationships()
+
+
+@app.put("/fatigue/relationships/{exercise_id}", response_model=FatigueRelationship)
+def save_fatigue_relationship(exercise_id: str, data: FatigueRelationshipInput):
+    try:
+        return fatigue_relationships.save(exercise_id, data.patterns)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+class PendingFatigueMapping(BaseModel):
+    exercise_template_id: str
+    title: str
+
+
+class FatigueContext(BaseModel):
+    reference_exercise_days: float | None
+    reference_pattern_days: float | None
+    reference_related_sets_7: float | None
+    recent_exercise_days: float | None
+    recent_pattern_days: float | None
+    recent_related_sets_7: float | None
+    latest_exercise_days: float | None
+    latest_pattern_days: float | None
+    latest_related_sets_7: int | None
+    current_exercise_days: float | None
+    pending_mappings: list[PendingFatigueMapping]
+    additional_work_since_ts: bool
+    extra_sets_eligible: bool
+    block_reasons: list[str]
+
+
 class FatiguePoint(BaseModel):
+    days_since_exercise: float | None
+    days_since_pattern: float | None
+    related_sets_7_before: int | None
+    related_workouts_7_before: int | None
     dose_complete: bool
     rolling_sets_7: int
     start_time: str
@@ -407,6 +469,7 @@ class FatigueTrend(BaseModel):
     comparable_sessions: int
     needed_sessions: int
     collection: FatigueCollection
+    context: FatigueContext
     status: str
     action: str
     message: str
