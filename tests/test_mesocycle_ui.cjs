@@ -71,6 +71,21 @@ const logContext=vm.createContext({
 vm.runInContext(log.slice(log.indexOf('  async function loadPlannedWorkout('),log.indexOf('  async function loadPlannedQuery(')),logContext);
 vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  const saveDialog =')),logContext);
 (async()=>{
+ const saveControls={editor:{hidden:false,reportValidity:()=>true},savePlan:{disabled:false},planName:{value:'Updated plan'},planNotes:{value:'Notes'}};
+ let failSave=false,saveMessage='';
+ const saveContext=vm.createContext({busy:false,dirty:true,plan:{id:'p',revision:1,weeks:[]},KEY:'draft',
+  $:key=>saveControls[key],applyNaming(){},rpeAssignmentsForPlan:()=>({}),json:(method,body)=>({method,body}),
+  api:async()=>{if(failSave)throw Error('Save failed');return {id:'p',revision:2,weeks:[]};},
+  localStorage:{removeItem(){}},refreshPlans:async()=>{},message:text=>saveMessage=text});
+ vm.runInContext(builder.match(/async function save\([^\n]+/)[0],saveContext);
+ failSave=true;assert.equal(await saveContext.save(),false);
+ assert.equal(saveControls.editor.hidden,false,'Failed save must keep the editor open');
+ assert.equal(saveContext.dirty,true);assert.equal(saveControls.savePlan.disabled,false);
+ failSave=false;assert.equal(await saveContext.save(),true);
+ assert.equal(saveControls.editor.hidden,true,'Successful save must close the editor');
+ assert.equal(saveContext.dirty,false);assert.equal(saveMessage,'Plan saved.');
+ assert.equal(saveContext.plan.id,'p','Keep the saved plan available for Use this microcycle');
+ assert.equal(saveControls.savePlan.disabled,false);
  let deletionCalls=[],cleared=0,allowDelete=false,failDelete=false;const editorState={hidden:false};
  const deletionContext=vm.createContext({busy:false,dirty:true,plan:{id:'p'},plans:[{id:'p'},{id:'other'}],KEY:'draft',
   confirm:()=>allowDelete,$:()=>editorState,localStorage:{removeItem:()=>cleared++},renderLibrary(){},message(){},
