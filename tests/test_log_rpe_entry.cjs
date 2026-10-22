@@ -87,7 +87,7 @@ context.draft = { title: 'Test', startedAt: '2026-10-17T12:00:00Z', exercises: [
 ] };
 context.document = { querySelector() { return input.attrs['aria-invalid'] ? input : null; } };
 const buildStart = html.indexOf('  function buildEntry()');
-const buildEnd = html.indexOf('  $("finish").addEventListener', buildStart);
+const buildEnd = html.indexOf('  const saveDialog =', buildStart);
 vm.runInContext(html.slice(buildStart, buildEnd), context);
 type('7.2');
 assert.throws(() => context.buildEntry(), /Correct the highlighted RPE/);

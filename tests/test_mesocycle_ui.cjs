@@ -69,7 +69,7 @@ const logContext=vm.createContext({
  document:{querySelector:()=>null},
 });
 vm.runInContext(log.slice(log.indexOf('  async function loadPlannedWorkout('),log.indexOf('  async function loadPlannedQuery(')),logContext);
-vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  $("finish").addEventListener')),logContext);
+vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  const saveDialog =')),logContext);
 (async()=>{
  let deletionCalls=[],cleared=0,allowDelete=false,failDelete=false;const editorState={hidden:false};
  const deletionContext=vm.createContext({busy:false,dirty:true,plan:{id:'p'},plans:[{id:'p'},{id:'other'}],KEY:'draft',

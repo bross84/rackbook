@@ -1791,10 +1791,34 @@
       ...(draft.planned_session ? { planned_session: draft.planned_session } : {}) };
   }
 
-  $("finish").addEventListener("click", async () => {
-    if (saving) return;
+  const saveDialog = document.createElement("dialog");
+  saveDialog.id = "saveConfirmation";
+  saveDialog.setAttribute("aria-labelledby", "saveConfirmationTitle");
+  saveDialog.style.cssText = "box-sizing:border-box;width:calc(100% - 32px);max-width:480px;max-height:80dvh;overflow:auto;border:1px solid #64748b;border-radius:16px;padding:20px;color:inherit;background:var(--bg, Canvas)";
+  saveDialog.innerHTML = '<h2 id="saveConfirmationTitle">Save workout to Hevy?</h2><p id="saveWorkoutName"></p><p id="saveSetCount"></p><p id="saveExcludedCount"></p><ul id="saveExcludedSets"></ul><div style="display:flex;flex-wrap:wrap;gap:12px"><button id="keepTraining" type="button" autofocus>Keep training</button><button id="confirmSave" type="button" class="primary">Save to Hevy</button></div>';
+  document.body.append(saveDialog);
+  let pendingSaveEntry = null;
+  $("keepTraining").addEventListener("click", () => saveDialog.close());
+  saveDialog.addEventListener("close", () => { pendingSaveEntry = null; });
+  $("finish").addEventListener("click", () => {
+    if (saving || saveDialog.open) return;
     let entry;
     try { entry = buildEntry(); } catch (err) { say(err.message); window.scrollTo(0, 0); return; }
+    const excluded = draft.exercises.flatMap(ex => ex.sets.flatMap((s, i) =>
+      !s.done && s.type !== "warmup" ? [ex.title + " — set " + (i + 1)] : []));
+    $("saveWorkoutName").textContent = entry.title;
+    $("saveSetCount").textContent = entry.exercises.reduce((n, ex) => n + ex.sets.length, 0) + " completed sets will be saved.";
+    $("saveExcludedCount").textContent = excluded.length + " unticked working sets will be excluded.";
+    $("saveExcludedSets").replaceChildren(...excluded.map(text => { const li = document.createElement("li"); li.textContent = text; return li; }));
+    pendingSaveEntry = entry;
+    saveDialog.showModal();
+    $("keepTraining").focus();
+  });
+  $("confirmSave").addEventListener("click", async () => {
+    if (saving) return;
+    if (!saveDialog.open || !pendingSaveEntry) return;
+    const entry = pendingSaveEntry;
+    saveDialog.close();
     saving = true; $("finish").disabled = true; $("finish").textContent = "Saving…"; say("");
     try {
       const saved = await api("/hevy/workouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) });
