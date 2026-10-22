@@ -102,6 +102,11 @@ class TestStressRoute(unittest.TestCase):
         response=self.client.get('/stress')
         self.assertEqual(200,response.status_code)
         self.assertIn('no-cache',response.headers['cache-control'])
+        detail=self.client.get('/stress/details?movement=bench&days=180')
+        self.assertEqual(200,detail.status_code)
+        self.assertIn('no-cache',detail.headers['cache-control'])
+        self.assertIn('detailsLink',response.text)
+        self.assertIn('dashboardLink',detail.text)
         self.assertEqual(422,self.client.get('/movement-stress/bench/history?days=-1').status_code)
         self.hevy.exercise_history.assert_not_called()
 

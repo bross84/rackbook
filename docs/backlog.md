@@ -59,6 +59,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Visual Stress dashboard (2026-10-21): `/stress` now shows compact movement shortcuts, baseline collection and observation/stress charts. View details opens `/stress/details` with the same selected movement/history range for explanations, raw tables, timing diagnostics and related-movement setup. Relationship saves prominently confirm the effect, remain marked ✓ Saved until edited, and visibly offer retry on failure. Existing data, collection gates and calculations are retained.
+
 - Fatigue timing and related work (2026-10-21): Stress adds an explicit Related movements editor with inactive suggestions and confirmed multi-pattern/Not related mappings. The model records exact/pattern gaps and prior seven-day related sets/workouts, blocking extra-set advice after unusually long breaks, changed related context, new work after the assessed TS, missing context or unreviewed mappings. Historical comparisons exclude the assessed workout and future data. Existing reduction/review/pain rules, 12-session collection and 21-day resets remain intact. Context is exposed alongside the charts and observations; all calculations use local saved history and provisional comparison tolerances.
 
 - One-time history import panel hidden (2026-10-20): the BS-Bridge import panel is hidden after the completed import. Existing imported sets and builder contribution settings continue working.

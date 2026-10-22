@@ -39,6 +39,18 @@
     th,td { text-align:right; padding:10px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
     th:first-child,td:first-child { text-align:left; } th { color:var(--muted); font-weight:500; }
     td small { display:block; white-space:normal; min-width:120px; max-width:220px; } caption { text-align:left; font-size:13px; color:var(--muted); margin-bottom:8px; }
+    .view-links { display:flex; justify-content:flex-end; gap:12px; margin:8px 0 12px; }
+    #dashboardLink { margin-right:auto; }
+    .compact-stress-chart text { font-size:16px; }
+    .dashboard-heading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    .dashboard-summary { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:8px 0; }
+    .dashboard-summary strong { font-size:16px; font-weight:500; }
+    .dashboard-plots { margin-top:8px; }
+    .relationship-feedback { padding:10px 12px; border-radius:8px; background:var(--accent-soft, var(--bg)); margin:8px 0 0; }
+    .relationship-feedback:empty { display:none; }
+    .relationship-feedback.error { background:var(--card); }
+    body.dashboard-view .movement-card .note { font-size:12px; }
+    @media(max-width:620px) { body.dashboard-view .overview { grid-template-columns:repeat(3,minmax(0,1fr)); } body.dashboard-view .movement-card { padding:10px 8px; } .controls label:first-child { flex:1 0 100%; } }
     .relationship-row { padding:12px 0; border-bottom:1px solid var(--line); }
     .relationship-options { display:flex; flex-wrap:wrap; gap:6px 16px; margin:8px 0; }
     .relationship-options label { min-height:44px; }
@@ -137,24 +149,25 @@
 <body>
 <main>
   <header class="app-header">
-    <div class="page-heading"><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Movement stress</h1></div></div>
+    <div class="page-heading"><div class="page-title"><span class="eyebrow">Rackbook</span><h1 id="stressTitle">Movement stress</h1></div></div>
     <nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress" aria-current="page">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
-  <p class="note intro">Training dose by movement, recalculated from your saved workouts. Older blank RPEs are estimated @5; exact local RPEs take precedence.</p>
+  <p class="note intro" id="stressIntro" hidden data-details-only>Scores, observations and settings for the selected movement.</p>
+  <div class="view-links"><a id="dashboardLink" href="/stress" hidden data-details-only>← Back to dashboard</a><a id="detailsLink" href="/stress/details">View details →</a></div>
   <div class="controls">
     <label>Movement <select id="movement" aria-label="Movement"><option value="">Loading movements…</option></select></label>
-    <label>History <select id="range" aria-label="History range"><option value="56">8 weeks</option><option value="180">6 months</option><option value="365">1 year</option><option value="0">All history</option></select></label>
+    <label>Stress history <select id="range" aria-label="History range"><option value="56">8 weeks</option><option value="180">6 months</option><option value="365">1 year</option><option value="0">All history</option></select></label>
     <button id="refresh" type="button">Refresh</button>
   </div>
   <div id="status" role="status"></div>
   <section class="overview" id="overview" aria-label="Main movements"></section>
   <section id="fatigue" aria-label="Performance and soreness trends"></section>
-  <details class="card" id="relationshipEditor"><summary>Related movements</summary>
-    <p class="note">Confirm which patterns each recorded exercise affects. Suggestions are inactive until saved. Leave every pattern unchecked and save to confirm Not related.</p>
+  <details class="card" id="relationshipEditor" hidden data-details-only><summary>Related movements</summary>
+    <p class="note">Choose which patterns share workload with each exercise. For example, leg press can contribute to Squat workload. Saving activates those relationships in the fatigue model. Leave every box unchecked to mark an exercise Not related.</p>
     <div id="relationshipRows" aria-live="polite">Open to review recorded exercises.</div>
   </details>
   <section id="detail" aria-label="Selected movement" aria-busy="false"></section>
-  <details class="card"><summary>How to read these metrics</summary>
+  <details class="card" hidden data-details-only><summary>How to read these metrics</summary>
     <p class="note">Total stress is the average of central and peripheral stress. Central emphasizes relative load; peripheral also weights proximity to failure. These are estimates of workload, not measurements of nervous-system fatigue or recovery limits.</p>
     <p class="note">Session windows use 80–120% of the median session from the preceding 56 days; elevated is above 120%, much higher above 150%. Fewer than six prior sessions is provisional. Historical windows use only sessions before the workout being assessed. Missed weeks do not become zero-stress sessions.</p>
     <p class="note">Rolling totals are trailing 7- and 28-day durations, including each saved workout once. Gaps stay visible; the lines join recorded sessions and do not imply workouts occurred between them. Changing the history selector never changes today’s rolling totals or removes earlier data needed for a baseline.</p>
@@ -164,7 +177,27 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function () {});</script>
 <script>
   const $ = (id) => document.getElementById(id), NS = "http://www.w3.org/2000/svg";
+  const detailsMode = location.pathname === "/stress/details";
+  const pageParams = new URLSearchParams(location.search);
   let movements = [], selected = "", generation = 0, overviewGeneration = 0;
+  document.body.classList.toggle("dashboard-view", !detailsMode);
+  document.title = detailsMode ? "Movement stress details" : "Movement stress";
+  $("stressTitle").textContent = detailsMode ? "Movement stress details" : "Movement stress";
+  for(const node of document.querySelectorAll("[data-details-only]"))node.hidden = !detailsMode;
+  $("overview").hidden = detailsMode;
+  $("detailsLink").hidden = detailsMode;
+  const requestedRange = pageParams.get("days");
+  if(["56","180","365","0"].includes(requestedRange))$("range").value=requestedRange;
+  function stressViewUrl(id, days, details=false) {
+    const query=new URLSearchParams({movement:id,days:String(days)});
+    return (details?"/stress/details":"/stress")+"?"+query.toString();
+  }
+  function updateViewLinks(id) {
+    const days=$("range").value;
+    $("detailsLink").href=stressViewUrl(id,days,true);
+    $("dashboardLink").href=stressViewUrl(id,days,false);
+    history.replaceState(null,"",stressViewUrl(id,days,detailsMode)+location.hash);
+  }
   const results = new Map(), cards = new Map();
   const names = { squat:"Squat", bench:"Bench", deadlift:"Deadlift" };
   const statuses = { no_sets:"Unscored", no_baseline:"Building history", below_usual:"Below usual", usual:"Usual", elevated:"Elevated", much_higher:"Much higher" };
@@ -179,11 +212,10 @@
     card.append(el("span","card-title",names[movement.primary_key]));
     if(error) { card.append(el("span","note error",error),el("span","note","Select to retry")); return; }
     if(!data) { card.append(el("span","note","Loading…")); return; }
-    const c=data.current, latest=data.sessions.at(-1);
+    const latest=data.sessions.at(-1);
     card.append(el("span","card-score",latest && latest.score.sets ? fmt(latest.score.total):"—"),
-      el("span","note",latest?"Last session · "+date(latest.start_time):"No sessions in selected history"),
-      el("span","note","7 days "+fmt(c.rolling_7.total)+" · 28 days "+fmt(c.rolling_28.total)),
-      el("span","note","Next session window "+windowText(c.window)));
+      el("span","note",latest?date(latest.start_time):"No sessions"));
+    card.setAttribute("aria-label",names[movement.primary_key]+", latest session stress "+(latest&&latest.score.sets?fmt(latest.score.total):"unavailable")+". Select movement.");
   }
   async function load(id, force=false) {
     const key=id+"|"+$("range").value;
@@ -196,15 +228,16 @@
     return results.get(key);
   }
   function svgNode(tag, attrs, text) { const n=document.createElementNS(NS,tag); for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v); if(text!=null)n.textContent=text; return n; }
-  function chart(rows) {
-    const svg=svgNode("svg",{viewBox:"0 0 800 250",role:"img","aria-label":"Session stress over time with shaded historical usual total-stress window"});
+  function chart(rows, compact=false) {
+    const right=compact?452:772;
+    const svg=svgNode("svg",{class:compact?"compact-stress-chart":"",viewBox:compact?"0 0 480 250":"0 0 800 250",role:"img","aria-label":"Session stress over time with shaded historical usual total-stress window"});
     svg.append(svgNode("title",{},"Session stress and the usual total-stress window calculated before each workout. Exact values are in the history table."));
     const usable=rows.filter(r=>r.score.sets); if(!usable.length)return el("p","note","No scored sessions in this range.");
     const times=usable.map(r=>Date.parse(r.start_time)), first=Math.min(...times), last=Math.max(...times);
     const hasWindow=(r)=>Number.isFinite(r.window?.lower)&&Number.isFinite(r.window?.upper);
     const max=Math.max(1,...usable.flatMap(r=>[r.score.total,r.score.peripheral,r.score.central,...(hasWindow(r)?[r.window.upper]:[])]));
-    const x=(t)=>first===last?420:48+(t-first)/(last-first)*724, y=(v)=>210-v/max*185;
-    for(let i=0;i<=4;i++) { const value=max*i/4, yy=y(value); svg.append(svgNode("line",{x1:48,x2:772,y1:yy,y2:yy,stroke:"var(--line)"}),svgNode("text",{x:40,y:yy+4,"text-anchor":"end"},value.toFixed(1))); }
+    const x=(t)=>first===last?(48+right)/2:48+(t-first)/(last-first)*(right-48), y=(v)=>210-v/max*185;
+    for(let i=0;i<=4;i++) { const value=max*i/4, yy=y(value); svg.append(svgNode("line",{x1:48,x2:right,y1:yy,y2:yy,stroke:"var(--line)"}),svgNode("text",{x:40,y:yy+4,"text-anchor":"end"},value.toFixed(1))); }
     // Split at missing baselines: never bridge a period with no known usual range.
     let band=[];
     function drawBand() {
@@ -228,7 +261,7 @@
         dot.append(svgNode("title",{},date(r.start_time)+" · "+metric+" "+fmt(r.score[metric])+(compared?" · Usual "+windowText(r.window)+" · "+(above?"Above usual":below?"Below usual":"Within usual"):""))); svg.append(dot);
       }
     }
-    svg.append(svgNode("text",{x:48,y:239},date(usable[0].start_time)),svgNode("text",{x:772,y:239,"text-anchor":"end"},date(usable.at(-1).start_time)));
+    svg.append(svgNode("text",{x:48,y:239},date(usable[0].start_time)),svgNode("text",{x:right,y:239,"text-anchor":"end"},date(usable.at(-1).start_time)));
     return svg;
   }
   function renderDetail(data) {
@@ -280,20 +313,30 @@
       const label=el("label"), input=el("input"); input.type="checkbox"; input.value=key; input.checked=initial.includes(key);
       input.setAttribute("aria-label",item.title+" affects "+title); label.append(input,el("span",null,title)); inputs.push(input); options.append(label);
     }
-    const actions=el("div","relationship-actions"), save=el("button",null,"Confirm and save"), message=el("span","note");
-    save.type="button"; message.setAttribute("role","status");
-    for(const input of inputs)input.addEventListener("change",()=>{ message.textContent="Unsaved choices"; });
+    const actions=el("div","relationship-actions"), save=el("button",null,item.reviewed?"✓ Saved":initial.length?"Use these relationships":"Mark as not related"), message=el("p","relationship-feedback");
+    save.type="button"; save.disabled=item.reviewed; message.setAttribute("role","status");
+    for(const input of inputs)input.addEventListener("change",()=>{
+      save.disabled=false;
+      save.textContent=inputs.some(input=>input.checked)?"Save relationships":"Mark as not related";
+      message.className="relationship-feedback"; message.setAttribute("role","status"); message.textContent="Unsaved changes";
+    });
     save.addEventListener("click",async()=>{
-      save.disabled=true; for(const input of inputs)input.disabled=true; message.textContent="Saving…";
+      save.disabled=true; for(const input of inputs)input.disabled=true;
+      save.textContent="Saving…"; message.className="relationship-feedback"; message.setAttribute("role","status"); message.textContent="Saving your choice…";
+      let succeeded=false;
       try {
         const saved=await api("/fatigue/relationships/"+encodeURIComponent(item.exercise_template_id),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({patterns:inputs.filter(input=>input.checked).map(input=>input.value)})});
-        status.textContent=saved.patterns.length?"Confirmed: "+saved.patterns.map(p=>patternLabels[p]).join(", "):"Confirmed: Not related";
-        message.textContent="Saved locally";
+        const groups=saved.patterns.map(p=>patternLabels[p]).join(", ");
+        status.textContent=saved.patterns.length?"Confirmed: "+groups:"Confirmed: Not related";
+        message.textContent=saved.patterns.length?"✓ Saved. "+item.title+" now counts toward "+groups+" workload in the fatigue model.":"✓ Saved as Not related. These sets are excluded from other patterns’ workload.";
+        save.textContent="✓ Saved"; succeeded=true;
         if(selected)loadFatigue(selected,generation);
-      } catch(error) { message.textContent="Could not save: "+error.message+" Your choices are still here; retry."; }
-      finally { save.disabled=false; for(const input of inputs)input.disabled=false; }
+      } catch(error) {
+        message.className="relationship-feedback error"; message.setAttribute("role","alert");
+        message.textContent="Not saved: "+error.message+" Your choices are still here. Try again."; save.textContent="Retry save";
+      } finally { save.disabled=succeeded; for(const input of inputs)input.disabled=false; }
     });
-    actions.append(save,message); row.append(options,actions); return row;
+    actions.append(save); row.append(options,actions,message); return row;
   }
   async function loadRelationships() {
     const token=++relationshipGeneration, box=$("relationshipRows");
@@ -417,18 +460,48 @@
     }
     box.append(card);
   }
+  function renderFatigueDashboard(data) {
+    const box=$("fatigue"); box.replaceChildren();
+    const card=el("section","card"), heading=el("div","dashboard-heading");
+    heading.append(el("h2",null,movements.find(m=>m.id===selected)?.title||"Selected movement"));
+    card.append(heading);
+    const collecting=!data.collection.ready;
+    const summary=el("div","dashboard-summary");
+    summary.append(el("strong",null,data.status==="pain_flag"?"Pain/injury recorded":collecting?"Collecting baseline":trendNames[data.status]));
+    summary.append(el("span","note",data.collection.sessions+" / "+data.collection.required_sessions+" comparable TS sessions"));
+    card.append(summary);
+    if(collecting) {
+      const progress=el("progress","collection-progress"); progress.max=data.collection.required_sessions; progress.value=Math.min(data.collection.sessions,data.collection.required_sessions);
+      progress.setAttribute("aria-label","Baseline collection: "+data.collection.sessions+" of "+data.collection.required_sessions+" comparable sessions"); card.append(progress);
+    }
+    if(data.status==="pain_flag")card.append(el("p","error",data.message));
+    else if(!collecting)card.append(el("p","note",data.action==="hold"?"Current sets held · see details for the comparison.":data.action==="collect"?"More matched observations needed.":data.message));
+    const plots=el("div","observation-grid dashboard-plots");
+    for(const [key,title] of [["e1rm_lb","Marked TS e1RM (lb)"],["bodyweight_kg","Bodyweight · 7-day mean (kg)"],["working_sets","Working sets per session"],["soreness","Pre-session soreness"]])plots.append(observationChart(data.points,key,title,data.baseline_start));
+    card.append(plots); box.append(card);
+  }
+  function renderStressDashboard(data) {
+    const box=$("detail"); box.replaceChildren();
+    const card=el("section","card"), heading=el("div","dashboard-heading");
+    heading.append(el("h2",null,"Session stress"));
+    const metrics=el("div","dashboard-summary");
+    metrics.append(el("span","note","7 days "+fmt(data.current.rolling_7.total)),el("span","note","28 days "+fmt(data.current.rolling_28.total)));
+    const legend=el("div","legend");
+    for(const [label,cls] of [["Total",""],["Peripheral","ps"],["Central","cs"]])legend.append(el("span",cls,label));
+    card.append(heading,metrics,legend,chart(data.sessions,true)); box.append(card);
+  }
   async function loadFatigue(id, token) {
     const request=++fatigueGeneration;
     $("fatigue").replaceChildren(el("p","note","Loading TS and soreness trends…"));
-    try { const data=await api("/movement-fatigue/"+encodeURIComponent(id)); if(token===generation && request===fatigueGeneration)renderFatigue(data); }
+    try { const data=await api("/movement-fatigue/"+encodeURIComponent(id)); if(token===generation && request===fatigueGeneration){if(detailsMode)renderFatigue(data);else renderFatigueDashboard(data);} }
     catch(error) { if(token===generation && request===fatigueGeneration)$("fatigue").replaceChildren(el("p","error","Could not load performance trends. Use Refresh to retry.")); }
   }
   async function selectMovement(id, force=false) {
-    if(!id)return; selected=id; $("movement").value=id;
+    if(!id)return; selected=id; $("movement").value=id; updateViewLinks(id);
     for(const [key,card] of cards)card.setAttribute("aria-pressed",String(key===id));
     const token=++generation; $("detail").setAttribute("aria-busy","true"); $("detail").replaceChildren(el("p","note","Loading stress history…"));
     loadFatigue(id, token);
-    try { const data=await load(id,force); if(token!==generation)return; renderDetail(data); paintCard(id,data); }
+    try { const data=await load(id,force); if(token!==generation)return; if(detailsMode)renderDetail(data);else renderStressDashboard(data); paintCard(id,data); }
     catch(error) { if(token!==generation)return; $("detail").replaceChildren(el("p","error",error.message),el("p","note","Use Refresh to retry.")); paintCard(id,null,error.message); }
     finally { if(token===generation)$("detail").setAttribute("aria-busy","false"); }
   }
@@ -443,17 +516,20 @@
       for(const m of [...main,...movements.filter(m=>!m.primary_key)]) { const option=el("option",null,m.title); option.value=m.id; $("movement").append(option); }
       for(const key of ["squat","bench","deadlift"]) {
         const m=main.find(m=>m.primary_key===key);
-        if(!m) { $("overview").append(el("p","note",names[key]+": movement not found in exercise cache.")); continue; }
+        if(!m)continue;
         const card=el("button","movement-card"); card.type="button"; card.setAttribute("aria-pressed","false"); card.addEventListener("click",()=>selectMovement(m.id)); cards.set(m.id,card); $("overview").append(card); paintCard(m.id);
       }
       if(!movements.length) { $("status").textContent="No cached movements. Sync the Hevy exercise list in Settings first."; return; }
-      loadOverview(); selectMovement(main[0]?.id||movements[0].id);
+      const requested=pageParams.get("movement");
+      const initial=movements.some(m=>m.id===requested)?requested:(main[0]?.id||movements[0].id);
+      if(!detailsMode)loadOverview(); selectMovement(initial);
+      if(detailsMode && location.hash==="#relationshipEditor") {$("relationshipEditor").open=true;}
     }catch(error){$("status").replaceChildren(el("p","error",error.message));}
   }
   $("relationshipEditor").addEventListener("toggle",()=>{if($("relationshipEditor").open)loadRelationships();});
   $("movement").addEventListener("change",()=>selectMovement($("movement").value));
-  $("range").addEventListener("change",()=>{loadOverview();selectMovement(selected);});
-  $("refresh").addEventListener("click",()=>{if($("relationshipEditor").open)loadRelationships();if(!movements.length){init();return;} results.clear(); loadOverview(); selectMovement(selected);});
+  $("range").addEventListener("change",()=>{if(!detailsMode)loadOverview();selectMovement(selected);});
+  $("refresh").addEventListener("click",()=>{if($("relationshipEditor").open)loadRelationships();if(!movements.length){init();return;} results.clear(); if(!detailsMode)loadOverview(); selectMovement(selected);});
   init();
 </script>
 
