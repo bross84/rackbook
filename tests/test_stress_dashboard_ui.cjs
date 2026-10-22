@@ -9,7 +9,7 @@ function nodes(node) {return [node,...node.children.flatMap(nodes)];}
 function text(node) {return nodes(node).map(n=>n.text??'').join(' ');}
 const boxes={fatigue:el('section'),detail:el('section'),range:{value:'180'},detailsLink:{},dashboardLink:{}};
 const historyCalls=[];
-const context=vm.createContext({el,svgNode,$:id=>boxes[id],URLSearchParams,detailsMode:false,
+const context=vm.createContext({RackbookCharts:{create:()=>el('canvas')},el,svgNode,$:id=>boxes[id],URLSearchParams,detailsMode:false,
   history:{replaceState:(...args)=>historyCalls.push(args)},location:{hash:''},
   date:s=>s,movements:[{id:'a/b & c',title:'Squat'}],selected:'a/b & c',fmt:v=>v==null?'—':v.toFixed(2),chart:()=>el('svg')});
 vm.runInContext(html.slice(html.indexOf('  function stressViewUrl('),html.indexOf('  const results =')),context);
@@ -27,7 +27,7 @@ const sample={collection,status:'building_baseline',message:'Long explanations d
 context.renderFatigueDashboard(sample);
 assert.match(text(boxes.fatigue),/Collecting baseline/);
 assert.match(text(boxes.fatigue),/5 \/ 12/);
-assert.equal(nodes(boxes.fatigue).filter(n=>n.tag==='svg').length,4);
+assert.equal(nodes(boxes.fatigue).filter(n=>n.tag==='canvas').length,4);
 assert.equal(nodes(boxes.fatigue).filter(n=>n.tag==='table'||n.tag==='details').length,0);
 assert.doesNotMatch(text(boxes.fatigue),/Long explanations|When interpretations begin|Review related|Unknown|Provisional/);
 assert.equal(nodes(boxes.fatigue).find(n=>n.tag==='progress').value,5);

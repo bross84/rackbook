@@ -71,7 +71,36 @@
     .page-back { flex-shrink:0; min-height:44px; padding:4px 8px; border:0; border-radius:8px; background:transparent; color:var(--accent,currentColor); font:inherit; font-size:14px; cursor:pointer; white-space:nowrap; }
     .page-back:disabled { opacity:.4; cursor:default; }
     .page-back:focus-visible { outline:2px solid var(--accent,currentColor); outline-offset:2px; }
-  </style>
+
+    .range-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
+    .segmented { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+    .segmented button { border:0; border-right:1px solid var(--line); padding:4px 10px; min-height:28px; font-size:11px; color:var(--muted); background:var(--card); white-space:nowrap; }
+    .segmented button:last-child { border-right:0; }
+    .segmented button[aria-pressed="true"] { background:var(--accent); color:var(--card); }
+    .zoom-actions { display:flex; gap:3px; margin-left:auto; }
+    .zoom-actions button,.session-step { min-height:30px; min-width:30px; padding:3px 8px; border:1px solid var(--line); border-radius:5px; background:var(--card); color:var(--muted); font-size:12px; }
+    .plot-wrap { height:260px; position:relative; width:100%; min-width:0; }
+    .plot-wrap canvas { touch-action:pan-y !important; }
+    .plot-wrap canvas:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    .stress-chart .chart-note,.stress-chart .note { font-size:11px; color:var(--muted); line-height:1.55; margin:8px 0 0; }
+    .chart-tooltip { position:absolute; z-index:2; width:250px; max-width:calc(100% - 12px); padding:10px 12px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); box-shadow:var(--shadow); font-size:11px; pointer-events:none; }
+    .chart-tooltip strong { display:block; margin-bottom:6px; font-size:12px; }
+    .tooltip-row { display:flex; justify-content:space-between; gap:16px; color:var(--muted); }
+    .tooltip-row b { color:var(--text); font-weight:550; }
+    .chart-tooltip .note { border-top:1px solid var(--line); padding-top:6px; margin-top:6px; font-size:10px; }
+    @media(max-width:800px) { .plot-wrap {height:230px;} }
+    @media(max-width:480px) {
+      .plot-wrap {height:220px;} .range-row {gap:8px 4px;} .segmented {flex:1;}
+      .segmented button {flex:1;padding:6px 7px;min-height:36px;}
+      .zoom-actions {width:100%;justify-content:flex-end;} .zoom-actions button {min-height:36px;min-width:36px;}
+    }
+    @media(max-width:350px) {
+      .segmented {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex-basis:100%;}
+      .segmented button:nth-child(-n+3) {border-bottom:1px solid var(--line);}
+      .segmented button:nth-child(3) {border-right:0;}
+    }
+.legend {display:none;} .stress-chart { min-width:0; } .stress-chart .chart-selection {font-size:11px;color:var(--muted);margin-top:8px;min-height:34px} .stress-chart input {min-width:0;max-width:145px;font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:5px} .stress-chart .range-row {font-size:11px} .observation-grid figure {min-width:0;}
+</style>
   <style id="rackbook-theme">
 
     /* Rackbook visual system: kept inline so every page remains self-contained. */
@@ -175,9 +204,13 @@
     <p class="note">Warm-ups are excluded. Unsupported or invalid sets are marked unscored. Historical estimates leave the original workout data untouched. This dashboard covers saved workouts; the active draft is shown on the workout log.</p>
   </details>
 </main>
+<script src="/static/vendor/chart-4.4.0.umd.js"></script>
+<script src="/static/vendor/hammer-2.0.8.min.js"></script>
+<script src="/static/vendor/chartjs-plugin-zoom-2.2.0.min.js"></script>
+<script src="/static/stress-charts.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function () {});</script>
 <script>
-  const $ = (id) => document.getElementById(id), NS = "http://www.w3.org/2000/svg";
+  const $ = (id) => document.getElementById(id);
   const detailsMode = location.pathname === "/stress/details";
   const pageParams = new URLSearchParams(location.search);
   let movements = [], selected = "", generation = 0, overviewGeneration = 0;
@@ -228,42 +261,11 @@
     }
     return results.get(key);
   }
-  function svgNode(tag, attrs, text) { const n=document.createElementNS(NS,tag); for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v); if(text!=null)n.textContent=text; return n; }
   function chart(rows, compact=false) {
-    const right=compact?452:772;
-    const svg=svgNode("svg",{class:compact?"compact-stress-chart":"",viewBox:compact?"0 0 480 250":"0 0 800 250",role:"img","aria-label":"Session stress over time with shaded historical usual total-stress window"});
-    svg.append(svgNode("title",{},"Session stress and the usual total-stress window calculated before each workout. Exact values are in the history table."));
-    const usable=rows.filter(r=>r.score.sets); if(!usable.length)return el("p","note","No scored sessions in this range.");
-    const times=usable.map(r=>Date.parse(r.start_time)), first=Math.min(...times), last=Math.max(...times);
-    const hasWindow=(r)=>Number.isFinite(r.window?.lower)&&Number.isFinite(r.window?.upper);
-    const max=Math.max(1,...usable.flatMap(r=>[r.score.total,r.score.peripheral,r.score.central,...(hasWindow(r)?[r.window.upper]:[])]));
-    const x=(t)=>first===last?(48+right)/2:48+(t-first)/(last-first)*(right-48), y=(v)=>210-v/max*185;
-    for(let i=0;i<=4;i++) { const value=max*i/4, yy=y(value); svg.append(svgNode("line",{x1:48,x2:right,y1:yy,y2:yy,stroke:"var(--line)"}),svgNode("text",{x:40,y:yy+4,"text-anchor":"end"},value.toFixed(1))); }
-    // Split at missing baselines: never bridge a period with no known usual range.
-    let band=[];
-    function drawBand() {
-      if(!band.length)return;
-      if(band.length===1) {
-        const r=band[0]; svg.append(svgNode("rect",{x:x(Date.parse(r.start_time))-6,y:y(r.window.upper),width:12,height:y(r.window.lower)-y(r.window.upper),fill:"var(--accent)",opacity:.14}));
-      } else {
-        const upper=band.map(r=>x(Date.parse(r.start_time))+","+y(r.window.upper));
-        const lower=band.map(r=>x(Date.parse(r.start_time))+","+y(r.window.lower));
-        svg.append(svgNode("polygon",{points:[...upper,...[...lower].reverse()].join(" "),fill:"var(--accent)",opacity:.14}));
-        for(const points of [upper,lower])svg.append(svgNode("polyline",{points:points.join(" "),fill:"none",stroke:"var(--accent)","stroke-opacity":.45,"stroke-dasharray":"4 4","stroke-width":1}));
-      }
-      band=[];
-    }
-    for(const r of usable) { if(hasWindow(r))band.push(r);else drawBand(); } drawBand();
-    for(const [metric,color] of [["peripheral","var(--peripheral)"],["central","var(--central)"],["total","var(--accent)"]]) {
-      svg.append(svgNode("polyline",{points:usable.map(r=>x(Date.parse(r.start_time))+","+y(r.score[metric])).join(" "),fill:"none",stroke:color,"stroke-width":2}));
-      for(const r of usable) {
-        const compared=metric==="total"&&hasWindow(r), above=compared&&r.score.total>r.window.upper, below=compared&&r.score.total<r.window.lower;
-        const dot=svgNode("circle",{cx:x(Date.parse(r.start_time)),cy:y(r.score[metric]),r:above||below?4.5:3,fill:above?"var(--error)":below?"var(--card)":color,stroke:above?"var(--error)":color,"stroke-width":above||below?2:0});
-        dot.append(svgNode("title",{},date(r.start_time)+" · "+metric+" "+fmt(r.score[metric])+(compared?" · Usual "+windowText(r.window)+" · "+(above?"Above usual":below?"Below usual":"Within usual"):""))); svg.append(dot);
-      }
-    }
-    svg.append(svgNode("text",{x:48,y:239},date(usable[0].start_time)),svgNode("text",{x:right,y:239,"text-anchor":"end"},date(usable.at(-1).start_time)));
-    return svg;
+    return RackbookCharts.create(rows, {
+      title:'Session stress', stress:true, compact,
+      series:[['total','Total','#4a79f5'],['peripheral','Peripheral','#377a58'],['central','Central','#d99132']]
+    });
   }
   function renderDetail(data) {
     const box=$("detail"); box.replaceChildren();
@@ -373,44 +375,10 @@
   const trendNames = { building_baseline:"Collecting baseline", stable:"Provisional: stable TS trend", improving:"Provisional: improving TS trend", declining:"Provisional: declining TS trend", pain_flag:"Pain/injury recorded" };
   function percent(value) { return value == null ? "—" : (value > 0 ? "+" : "") + value.toFixed(1) + "%"; }
   function observationChart(points, key, title, baselineStart) {
-    const figure=el("figure"); figure.append(el("figcaption",null,title));
-    const rows=points.filter(p=>Number.isFinite(Date.parse(p.start_time)));
-    const known=rows.filter(p=>Number.isFinite(p[key]));
-    if(!known.length && !(key==="soreness" && rows.some(p=>p.pain))) {
-      figure.append(el("p","note","No observations yet.")); return figure;
-    }
-    const svg=svgNode("svg",{viewBox:"0 0 480 210",role:"img","aria-label":title+" recorded observations"});
-    svg.append(svgNode("title",{},title+". Recorded observations only; gaps are not filled. Exact values are in the observations table."));
-    const times=rows.map(p=>Date.parse(p.start_time)), first=Math.min(...times), last=Math.max(...times);
-    const values=known.map(p=>p[key]);
-    let lower=key==="soreness"?0:Math.min(...values), upper=key==="soreness"?3:Math.max(...values);
-    if(key!=="soreness") { const pad=Math.max((upper-lower)*.15,upper*.02,1); lower=Math.max(0,lower-pad); upper+=pad; }
-    const x=t=>first===last?270:75+(t-first)/(last-first)*385, y=v=>165-(v-lower)/(upper-lower)*130;
-    const ticks=key==="soreness"?[0,1,2,3]:key==="working_sets"?[...new Set([Math.ceil(lower),Math.round((lower+upper)/2),Math.floor(upper)])]:[lower,(lower+upper)/2,upper];
-    for(const value of ticks) {
-      svg.append(svgNode("line",{x1:75,x2:460,y1:y(value),y2:y(value),stroke:"var(--line)"}),
-        svgNode("text",{x:67,y:y(value)+4,"text-anchor":"end"},key==="soreness"?sorenessNames[value]:value.toFixed(key==="working_sets"?0:1)));
-    }
-    let previous=null;
-    for(const point of rows) {
-      const time=Date.parse(point.start_time), value=point[key];
-      if(Number.isFinite(value)) {
-        const old=baselineStart && time<Date.parse(baselineStart), color=old?"var(--muted)":"var(--accent)";
-        // Soreness is categorical: show points only. Other lines just join adjacent observations.
-        if(key!=="soreness" && previous && time-previous.time<21*86400000) {
-          svg.append(svgNode("line",{x1:x(previous.time),y1:y(previous.value),x2:x(time),y2:y(value),stroke:color,"stroke-width":1.5,opacity:.45}));
-        }
-        const dot=svgNode("circle",{cx:x(time),cy:y(value),r:4,fill:color});
-        dot.append(svgNode("title",{},date(point.start_time)+" · "+(key==="soreness"?sorenessNames[value]:value.toFixed(1)))); svg.append(dot);
-        previous={time,value};
-      } else previous=null;
-      if(key==="soreness" && point.pain) {
-        const marker=svgNode("text",{x:x(time),y:18,fill:"var(--error)","text-anchor":"middle","font-weight":"bold"},"!");
-        marker.append(svgNode("title",{},date(point.start_time)+" · Pain or injury flagged")); svg.append(marker);
-      }
-    }
-    svg.append(svgNode("text",{x:75,y:198},date(rows[0].start_time)),svgNode("text",{x:460,y:198,"text-anchor":"end"},date(rows.at(-1).start_time)));
-    figure.append(svg); return figure;
+    const figure=el('figure'); figure.append(el('figcaption',null,title));
+    figure.append(RackbookCharts.create(points,{title,key,baselineStart,
+      categorical:key==='soreness',series:[[key,title,key==='bodyweight_kg'?'#d99132':'#4a79f5']]}));
+    return figure;
   }
   function renderFatigue(data) {
     const box=$("fatigue"); box.replaceChildren();
