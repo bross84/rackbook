@@ -98,6 +98,14 @@ class TestProgressPage(ProgressRouteCase):
         self.assertEqual("no-cache", r.headers["cache-control"])
         self.assertIn("Progress", r.text)
 
+    def test_chart_scripts_are_bundled_and_served_locally(self):
+        for name in ["chart-4.4.0.umd.js", "hammer-2.0.8.min.js", "chartjs-plugin-zoom-2.2.0.min.js"]:
+            path = "/static/vendor/" + name
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            self.assertGreater(len(response.content), 10000)
+            self.assertIn(path, self.client.get("/progress").text)
+
     def test_log_page_links_to_progress(self):
         self.assertIn('href="/progress"', self.client.get("/log").text)
 

@@ -31,7 +31,7 @@ Brian lifts 3 days a week and logs on his phone in the gym. He works up to a sin
 |---|---|
 | Backend | Python 3.11, FastAPI |
 | Database | SQLite at `DB_PATH` (`/data/rackbook.db` inside Docker) — `sqlite3` stdlib, no ORM |
-| Frontend | Vanilla JS, one self-contained HTML file per page, no bundler, no build step, no libraries |
+| Frontend | Vanilla JS, one HTML file per page, no bundler/build step; Progress uses locally bundled Chart.js and zoom scripts |
 | HTTP client | `httpx` for Hevy API calls |
 | Deployment | Docker + docker-compose on CasaOS homelab, port 8126 (8125 is reserved by the sibling service `hevy-fatigue`) |
 | PWA | Desktop and mobile PWA (`static/manifest.webmanifest`, `static/sw.js`) |
@@ -369,3 +369,16 @@ Validation: `node tests/test_stress_dashboard_ui.cjs` covers compact rendering, 
 ### Progress chart exploration (2026-10-21)
 
 Both Progress charts share an independently zoomable date window. Quick ranges end at the latest recorded session (30/90/180/365 days or All); exact dates are under Choose exact dates. Zoom buttons and mouse drag narrow the window; Earlier/Later move half a window with one-day minimum steps; Reset restores all history. Touch keeps vertical page scrolling, with large zoom/navigation buttons and tap-to-inspect. Session hit regions span the space between observations, keyboard arrows step through sessions, and both detail panels/date guides follow the selected session. Axes fit visible observations, empty ranges remain explicit, missing values break lines, and full years distinguish dates. The summary tiles retain the original shared overall comparison period regardless of zoom. Lift changes reset the view; resize preserves its dates. No new dependencies or backend/data changes. Verification: `node tests/test_progress_ui.cjs`, mocked browser at 390px and 1280px including range selection and mouse drag.
+
+
+### Progress chart renderer — Hevy-Fatigue reference (2026-10-22)
+
+The Progress renderer now uses the same Chart.js 4.4.0 engine as Hevy-Fatigue’s `static/index.html`. Reviewed `_trendChartBaseOptions`, `_vfBuildBarLineChart`, `_exmBuildLineChart`, `.vf-chart-wrap`, and compact segmented controls. The reference establishes sizing/visual treatment; Rackbook does not adopt its readiness formulas, thresholds, rest-day zeroes or data assumptions. This supersedes the handwritten SVG renderer described above.
+
+`progress.html` keeps its page logic inline and loads three versioned local files from `static/vendor/`: Chart.js, Hammer.js and chartjs-plugin-zoom. Licenses, upstream archive locations and SHA-256 hashes are in that directory. No CDN or bundler is needed; Docker’s existing COPY and `/static` mount include the assets. Other pages retain their existing renderers.
+
+Desktop has an overall-summary sidebar with two stacked chart cards; phone/tablet layouts place the compact summary above the charts. Plot parents have explicit 260px desktop/220px phone heights and `maintainAspectRatio:false`, so axes, strokes and text do not enlarge with page width. Small labeled axes, restrained grids/markers, compact legends, and a floating hover/tap tooltip follow the reference. A shared inspector provides full dates, e1RM/BW/score, nullable provenance and previous/next/select controls; focusable canvases support Left/Right/Home/End and +/−/Escape. The same inspector handles sessions with missing score/BW instead of snapping to a different session.
+
+The initial chart window is the latest 12 weeks relative to the last session. 4/8/12 weeks, one year, All and Custom set one shared window. Controls and plugin gestures support mouse drag-to-zoom, Shift-drag pan, Ctrl-wheel and touch pinch/horizontal pan. Touch retains vertical page scrolling through `touch-action:pan-y`. Numeric timestamp axes preserve elapsed time across gaps; nulls stay in every dataset with `spanGaps:false`. Axes fit observations within the window; explicit overlays explain empty windows or missing scores. Overall summary comparisons still use first/last scored sessions (or e1RM history if no score exists), independently of the chart window. The seven-day average and 14-day carry-forward, stored readings, backend calculation and fatigue behavior are unchanged.
+
+Charts are destroyed before lift reload/replacement; responses are checked after JSON parsing to reject stale loads. Theme changes recreate charts using current CSS colors; Chart.js handles resizing without resetting dates. Verification includes `node tests/test_progress_ui.cjs`, the Progress API/static-asset tests, and mocked browser checks at 390px and desktop width for range selection, drag zoom, keyboard/tap inspection, missing observations, zero/one sessions and repeated lift switches.
