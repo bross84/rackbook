@@ -145,6 +145,15 @@ class HevyClient:
             resp.raise_for_status()
             return resp.json().get("exercise_history") or []
 
+    def get_workout(self, workout_id: str) -> dict:
+        """Read one saved workout by ID. Never modifies Hevy."""
+        from urllib.parse import quote
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(f"{_BASE_URL}/workouts/{quote(workout_id, safe='')}", headers=self._headers())
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("workout", data)
+
     def create_workout(self, body: dict) -> dict:
         """Create a workout in Hevy and return it. Raises on HTTP or network errors.
         Hevy answers 201 with {"workout": [<workout>]} (a single-element list)."""
