@@ -76,6 +76,29 @@ class TestListHevyWorkouts(WorkoutsRouteCase):
         s = w["exercises"][0]["sets"][0]
         self.assertEqual((120.0, 264.6, 5, 6.0), (s["weight_kg"], s["weight_lb"], s["reps"], s["rpe"]))
 
+    def _record(self, reps, rpe, workout_id="w1", set_type="normal"):
+        import set_log
+        set_log.record([{
+            "hevy_workout_id": workout_id, "workout_title": "Day 1", "workout_start": "2026-09-30T17:00:00+00:00",
+            "workout_end": None, "exercise_template_id": "tpl-squat", "exercise_title": "Squat (Barbell)",
+            "set_number": 1, "set_type": set_type, "weight_kg": 120, "reps": reps, "rpe": rpe, "is_ts": 0}])
+
+    def test_rpe_hevy_dropped_comes_back_from_the_local_record(self):
+        page = {**RAW_PAGE, "workouts": [{**RAW_PAGE["workouts"][0], "exercises": [
+            {**RAW_PAGE["workouts"][0]["exercises"][0], "sets": [{"index": 0, "type": "normal", "weight_kg": 120, "reps": 5}]}]}]}
+        self.hevy.list_workouts.return_value = page
+        self._record(5, 5.5)
+        s = self.client.get("/hevy/workouts").json()["workouts"][0]["exercises"][0]["sets"][0]
+        self.assertEqual(5.5, s["rpe"])
+
+    def test_local_rpe_is_not_used_when_the_sets_do_not_line_up(self):
+        page = {**RAW_PAGE, "workouts": [{**RAW_PAGE["workouts"][0], "exercises": [
+            {**RAW_PAGE["workouts"][0]["exercises"][0], "sets": [{"index": 0, "type": "normal", "weight_kg": 120, "reps": 5}]}]}]}
+        self.hevy.list_workouts.return_value = page
+        self._record(3, 5.5)
+        s = self.client.get("/hevy/workouts").json()["workouts"][0]["exercises"][0]["sets"][0]
+        self.assertIsNone(s["rpe"])
+
     def test_passes_paging_through_to_hevy(self):
         self.client.get("/hevy/workouts?page=2&page_size=5")
         self.hevy.list_workouts.assert_called_once_with(page=2, page_size=5)

@@ -91,6 +91,38 @@ def for_exercise(exercise_template_id: str) -> list[dict[str, Any]]:
     return [dict(r) for r in found]
 
 
+def for_workouts(hevy_workout_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Recorded sets grouped by Hevy workout id, in the order they were logged."""
+    ids = [i for i in hevy_workout_ids if i]
+    if not ids:
+        return {}
+    with get_db() as conn:
+        found = conn.execute(
+            f"SELECT * FROM logged_sets WHERE hevy_workout_id IN ({','.join('?' * len(ids))}) ORDER BY id", ids
+        ).fetchall()
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for r in found:
+        grouped.setdefault(r["hevy_workout_id"], []).append(dict(r))
+    return grouped
+
+
+def overlay_summary_rpe(summary: dict[str, Any], local_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    A summarized Hevy workout (workout_view.summarize_workout) with the RPEs Hevy dropped filled back in from our record.
+    Same safety rule as overlay_exact_rpe: only when both sides hold the same sets, with the same reps and type, in order.
+    """
+    sets = [s for ex in summary["exercises"] for s in ex["sets"]]
+    if not local_rows or len(sets) != len(local_rows):
+        return summary
+    if any(s.get("reps") != r.get("reps") or (s.get("type") or "normal") != r.get("set_type")
+           for s, r in zip(sets, local_rows)):
+        return summary
+    for s, r in zip(sets, local_rows):
+        if s.get("rpe") is None and r.get("rpe") is not None:
+            s["rpe"] = r["rpe"]
+    return summary
+
+
 def overlay_exact_rpe(entries: list[dict[str, Any]], local_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Hevy history with the RPE Hevy could not store filled back in from our own record.

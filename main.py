@@ -169,10 +169,14 @@ def list_hevy_workouts(
     page_size: int = Query(10, ge=1, le=10),  # Hevy allows at most 10 workouts per page
 ):
     data = _call_hevy(lambda client: client.list_workouts(page=page, page_size=page_size))
+    raw = data.get("workouts", [])
+    recorded = set_log.for_workouts([str(w.get("id") or "") for w in raw])
     return {
         "page": int(data.get("page", page)),
         "page_count": int(data.get("page_count", 1)),
-        "workouts": [{**summarize_workout(w), "soreness_editable": soreness.editable(w["id"])} for w in data.get("workouts", [])],
+        # RPEs Hevy dropped (below 6, or 6.5) come back from our own set record
+        "workouts": [{**set_log.overlay_summary_rpe(summarize_workout(w), recorded.get(str(w.get("id") or ""), [])),
+                      "soreness_editable": soreness.editable(w["id"])} for w in raw],
     }
 
 
@@ -357,6 +361,7 @@ class StressDashboard(BaseModel):
 
 
 @app.get("/stress")
+@app.get("/stress/details")
 def stress_dashboard_page():
     return FileResponse("stress.html", headers=NO_CACHE)
 
