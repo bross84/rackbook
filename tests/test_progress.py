@@ -77,6 +77,32 @@ class BuildSeriesTest(unittest.TestCase):
         session = [{"date": "2026-01-02", "e1rm_lb": 250.0}]
         self.assertGreater(build_series(session, light)[0]["dots"], build_series(session, heavy)[0]["dots"])
 
+    def test_provenance_boundaries_and_no_future_measurements(self):
+        measurements = [{"date": "2025-07-26", "weight_kg": 80},
+                        {"date": "2025-08-01", "weight_kg": 90},
+                        {"date": "2025-08-20", "weight_kg": 70}]
+        dates = ["2025-07-25", "2025-08-01", "2025-08-12", "2025-08-15", "2025-08-16"]
+        out = build_series([{"date": d, "e1rm_lb": 300} for d in dates], measurements)
+        for i in [0, 4]:
+            for key in ["bodyweight_lb", "dots", "bodyweight_source_date", "bodyweight_age_days", "bodyweight_weigh_in_count"]:
+                self.assertIsNone(out[i][key])
+        for i, age in [(1, 0), (2, 11), (3, 14)]:
+            self.assertEqual(out[i]["bodyweight_source_date"], "2025-08-01")
+            self.assertEqual(out[i]["bodyweight_age_days"], age)
+            self.assertEqual(out[i]["bodyweight_weigh_in_count"], 2)
+            self.assertEqual(out[i]["bodyweight_lb"], round(85 * 2.20462, 1))
+
+    def test_requested_comparison(self):
+        measurements = [{"date": "2025-08-01", "weight_kg": 188.5 / 2.20462},
+                        {"date": "2026-10-16", "weight_kg": 169.8 / 2.20462}]
+        out = build_series([{"date": d, "e1rm_lb": 300} for d in ["2025-08-12", "2026-10-16"]], measurements)
+        self.assertEqual([p["bodyweight_lb"] for p in out], [188.5, 169.8])
+        self.assertEqual(out[0]["bodyweight_age_days"], 11)
+        self.assertEqual(out[1]["bodyweight_age_days"], 0)
+        self.assertEqual(round((169.8 / 188.5 - 1) * 100, 1), -9.9)
+        self.assertEqual(build_series([], measurements), [])
+        self.assertIsNone(build_series([{"date": "2025-01-01", "e1rm_lb": 300}], [])[0]["bodyweight_source_date"])
+
     def test_the_four_lifts_are_defined(self):
         self.assertEqual(set(LIFT_TITLES), {"squat", "bench", "deadlift", "press"})
 

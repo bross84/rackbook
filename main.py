@@ -2313,6 +2313,9 @@ class ProgressPoint(BaseModel):
     date: str
     e1rm_lb: float
     bodyweight_lb: float | None = None
+    bodyweight_source_date: str | None = None
+    bodyweight_age_days: int | None = None
+    bodyweight_weigh_in_count: int | None = None
     dots: float | None = None
 
 

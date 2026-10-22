@@ -69,6 +69,9 @@ class TestProgressData(ProgressRouteCase):
         self.assertGreater(point["e1rm_lb"], 220)
         self.assertEqual(round(80 * 2.20462, 1), point["bodyweight_lb"])
         self.assertGreater(point["dots"], 0)
+        self.assertEqual(point["bodyweight_source_date"], "2026-10-01")
+        self.assertEqual(point["bodyweight_age_days"], 1)
+        self.assertEqual(point["bodyweight_weigh_in_count"], 1)
 
     def test_no_bodyweight_still_returns_the_e1rm(self):
         self.cache_exercise("SQ1", progress.LIFT_TITLES["squat"])
@@ -79,6 +82,8 @@ class TestProgressData(ProgressRouteCase):
         (point,) = self.client.get("/progress/data?lift=squat").json()["series"]
         self.assertIsNone(point["bodyweight_lb"])
         self.assertIsNone(point["dots"])
+        for key in ["bodyweight_source_date", "bodyweight_age_days", "bodyweight_weigh_in_count"]:
+            self.assertIsNone(point[key])
 
     def test_no_api_key_is_a_400(self):
         self.cache_exercise("DL1", progress.LIFT_TITLES["deadlift"])

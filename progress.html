@@ -52,6 +52,9 @@
     .empty { text-align: center; color: var(--muted); padding: 32px 0; }
     svg { width: 100%; height: auto; display: block; }
     svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+    .comparison { grid-column: 1 / -1; overflow-wrap: anywhere; }
+    .chart-detail { min-height: 80px; margin-top: 10px; font-size: 13px; background: var(--soft); padding: 12px; border-radius: 10px; }
+    svg [data-session]:focus-visible { outline: 2px solid var(--accent); }
     .legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin: 2px 0 6px; }
     .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
     @media (min-width: 900px) { main { max-width: 1000px; } }
@@ -152,7 +155,7 @@
   <div id="stats" class="stats" hidden></div>
   <div id="charts"></div>
   <p class="note" id="foot" hidden>
-    Score is DOTS applied to this lift's e1RM (RPE table, best set per workout) at your 7-day average bodyweight.
+    Score is DOTS applied to this lift's e1RM (RPE table, best set per workout) at your seven-day average bodyweight at the latest available weigh-in, carried forward for up to 14 days.
     It is a trend against your own history, not comparable to powerlifting tables. Sets logged without an RPE are left out.
   </p>
 </main>
@@ -185,19 +188,26 @@
     if (msg) box.append(el("div", "error", msg));
   }
 
-  let showYear = false; // set per chart: add the year to dates when the data spans more than a year
   function fmtDate(iso) {
-    const d = new Date(iso + "T12:00:00");
-    return d.toLocaleDateString(undefined, showYear ? { month: "short", day: "numeric", year: "2-digit" } : { month: "short", day: "numeric" });
+    return new Date(iso + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  function sourceInfo(p) {
+    if (p.bodyweight_source_date == null) return "Bodyweight source: Unavailable";
+    const age = p.bodyweight_age_days;
+    return `${age ? "Carried forward from" : "Same-day reading:"} ${fmtDate(p.bodyweight_source_date)}; ${age} days old; ${p.bodyweight_weigh_in_count} weigh-ins in seven-day average`;
+  }
+  function detailText(p) {
+    const value = (v, unit = "") => v == null ? "Unavailable" : v.toFixed(1) + unit;
+    return `${fmtDate(p.date)} | e1RM: ${value(p.e1rm_lb, " lb")} | Bodyweight: ${value(p.bodyweight_lb, " lb")} | Strength score: ${value(p.dots)}. ${sourceInfo(p)}`;
   }
 
   /* One line chart. lines: [{key, color, axis: "left"|"right"}]; each axis scales to its own data. */
   function chart(points, lines, fmtLeft, fmtRight) {
-    const W = 700, H = 240, padL = 46, padR = fmtRight ? 46 : 12, padT = 10, padB = 24;
-    const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+    const W = Math.max(300, Math.round($("charts").getBoundingClientRect().width - 34)), H = 240, padL = 46, padR = fmtRight ? 46 : 12, padT = 10, padB = 24;
+    const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Workout history" });
     const t0 = new Date(points[0].date).getTime();
     const t1 = new Date(points[points.length - 1].date).getTime();
-    showYear = t1 - t0 > 300 * 86400000;
+
     const x = (p) => padL + (t1 === t0 ? (W - padL - padR) / 2 : ((new Date(p.date).getTime() - t0) / (t1 - t0)) * (W - padL - padR));
 
     const range = {};
@@ -217,14 +227,26 @@
       if (range.left) root.append(svg("text", { x: padL - 6, y: gy + 4, "text-anchor": "end" }, fmtLeft(range.left[1] - (i / 3) * (range.left[1] - range.left[0]))));
       if (range.right && fmtRight) root.append(svg("text", { x: W - padR + 6, y: gy + 4 }, fmtRight(range.right[1] - (i / 3) * (range.right[1] - range.right[0]))));
     }
-    root.append(svg("text", { x: padL, y: H - 6 }, fmtDate(points[0].date)));
-    root.append(svg("text", { x: W - padR, y: H - 6, "text-anchor": "end" }, fmtDate(points[points.length - 1].date)));
+    const count = t0 === t1 ? 1 : Math.max(2, Math.min(6, Math.floor((W - padL - padR) / 115) + 1));
+    for (let i = 0; i < count; i++) {
+      const f = count === 1 ? 0.5 : i / (count - 1);
+      const day = new Date(t0 + (count === 1 ? 0 : f * (t1 - t0))).toISOString().slice(0, 10);
+      root.append(svg("text", { x: padL + f * (W - padL - padR), y: H - 6,
+        "text-anchor": count === 1 ? "middle" : i === 0 ? "start" : i === count - 1 ? "end" : "middle" }, fmtDate(day)));
+    }
+    const panel = el("div", "chart-detail", "Hover, tap or focus a session for details.");
+    panel.setAttribute("aria-live", "polite");
 
     for (const l of lines) {
       if (!range[l.axis]) continue;
       const pts = points.filter((p) => p[l.key] != null);
       if (!pts.length) continue;
-      const d = pts.map((p, i) => (i ? "L" : "M") + x(p).toFixed(1) + " " + y(l.axis, p[l.key]).toFixed(1)).join(" ");
+      let connected = false;
+      const d = points.map(p => {
+        if (p[l.key] == null) { connected = false; return ""; }
+        const command = connected ? "L" : "M"; connected = true;
+        return command + x(p).toFixed(1) + " " + y(l.axis, p[l.key]).toFixed(1);
+      }).join(" ");
       root.append(svg("path", { d, fill: "none", stroke: l.color, "stroke-width": 2, "stroke-linejoin": "round" }));
       for (const p of pts) {
         const dot = svg("circle", { cx: x(p).toFixed(1), cy: y(l.axis, p[l.key]).toFixed(1), r: 3, fill: l.color });
@@ -232,7 +254,21 @@
         root.append(dot);
       }
     }
-    return root;
+    points.forEach((p, index) => {
+      const hit = svg("rect", { x: x(p) - 10, y: padT, width: 20, height: H - padT - padB,
+        fill: "transparent", tabindex: "0", role: "button", "aria-label": detailText(p), "data-session": index });
+      const select = () => { panel.textContent = detailText(p); };
+      for (const event of ["pointerenter", "click", "focus"]) hit.addEventListener(event, select);
+      hit.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); }
+        if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+          event.preventDefault();
+          root.querySelector(`[data-session="${Math.max(0, Math.min(points.length - 1, index + (event.key === "ArrowRight" ? 1 : -1)))}"]`).focus();
+        }
+      });
+      root.append(hit);
+    });
+    const wrapper = el("div"); wrapper.append(root, panel); return wrapper;
   }
 
   function legend(items) {
@@ -275,16 +311,21 @@
     // weigh-in) to the latest. Without any score, e1RM alone compares over the whole history.
     const span = scored.length ? scored : series;
     const a = span[0], b = span[span.length - 1];
-    showYear = new Date(b.date) - new Date(a.date) > 300 * 86400000;
     const since = fmtDate(a.date);
     if (scored.length) stats.append(stat("Strength score", b.dots, a.dots, round1, "", since));
     stats.append(stat("e1RM", b.e1rm_lb, a.e1rm_lb, round0, " lb", since));
     if (scored.length) stats.append(stat("Bodyweight", b.bodyweight_lb, a.bodyweight_lb, round1, " lb", since));
+    const comparison = el("div", "comparison note");
+    comparison.append(el("div", null, `Comparison workouts: ${fmtDate(a.date)} to ${fmtDate(b.date)}`));
+    for (const [label, point] of [["Start", a], ["End", b]]) {
+      comparison.append(el("div", null, `${label}: ${fmtDate(point.date)} | Bodyweight: ${point.bodyweight_lb == null ? "Unavailable" : round1(point.bodyweight_lb) + " lb"}. ${sourceInfo(point)}`));
+    }
+    stats.append(comparison);
 
     if (scored.length) {
       const card = el("div", "card");
       card.append(el("h2", null, "Strength score"), legend([{ label: "DOTS-style score", color: "var(--accent)" }]));
-      card.append(chart(scored, [{ key: "dots", color: "var(--accent)", axis: "left", label: "score" }], round1));
+      card.append(chart(series, [{ key: "dots", color: "var(--accent)", axis: "left", label: "score" }], round1));
       charts.append(card);
     } else {
       charts.append(el("div", "error", "No bodyweight found yet, so there is no score. Check that Hevy has weigh-ins (Apple Health sync)."));
@@ -302,8 +343,11 @@
     charts.append(card);
   }
 
+  let lastData;
+  window.addEventListener("resize", () => { if (lastData) render(lastData); });
   async function load() {
     const id = ++loadId;
+    lastData = null;
     for (const b of document.querySelectorAll("#lifts button")) b.setAttribute("aria-pressed", String(b.dataset.lift === current));
     showError("");
     $("charts").replaceChildren(el("div", "empty", "Loading…"));
@@ -318,7 +362,8 @@
         showError(detail);
         return;
       }
-      render(await res.json());
+      lastData = await res.json();
+      render(lastData);
     } catch (e) {
       if (id !== loadId) return;
       $("charts").replaceChildren();

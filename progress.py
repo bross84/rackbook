@@ -4,10 +4,11 @@ Pure: no DB access, no HTTP calls.
 
 e1RM per session comes from Hevy's per-set exercise history with the user's RPE table (the same
 reference_set the log page uses), so sets logged without an RPE don't count. Bodyweight is the 7-day
-trailing average of the daily weigh-ins, taken as of each session's date.
+trailing average at the latest weigh-in, carried forward for at most 14 days.
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from exercise_state import LB_PER_KG, PctLookup, reference_set, sessions_newest_first
@@ -44,16 +45,31 @@ def build_series(
 ) -> list[dict[str, Any]]:
     """
     Each session's {date, e1rm_lb} plus the smoothed bodyweight that day and the DOTS score.
-    Sessions before the first weigh-in keep their e1RM but get no bodyweight or score.
+    Source metadata describes the average at the latest weigh-in, not a new workout-day average.
+    Missing or expired readings retain null bodyweight, score and provenance.
     """
     smoothed = smooth_body_weight(measurements)
+    # Progress-only provenance: shared smoothing/lookup behavior (also used by fatigue) stays intact.
+    counts = {}
+    for row in smoothed:
+        start = (date.fromisoformat(row["date"]) - timedelta(days=6)).isoformat()
+        counts[row["date"]] = sum(start <= m["date"] <= row["date"] for m in measurements)
     series = []
     for point in sessions:
         bw_kg = weight_on(smoothed, point["date"])
+        source = None
+        if bw_kg is not None:
+            source = next(row for row in reversed(smoothed) if row["date"] <= point["date"])
+        source_date = source["date"] if source else None
+        age = (date.fromisoformat(point["date"]) - date.fromisoformat(source_date)).days if source else None
+        count = counts[source_date] if source else None
         series.append({
             "date": point["date"],
             "e1rm_lb": round(point["e1rm_lb"], 1),
             "bodyweight_lb": round(bw_kg * LB_PER_KG, 1) if bw_kg is not None else None,
+            "bodyweight_source_date": source_date,
+            "bodyweight_age_days": age,
+            "bodyweight_weigh_in_count": count,
             "dots": round(dots_score(point["e1rm_lb"] / LB_PER_KG, bw_kg, sex), 1) if bw_kg is not None else None,
         })
     return series

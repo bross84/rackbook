@@ -144,3 +144,6 @@ The gym is the garage on the home network, so none of this blocks use there.
 - Removed the old Hevy write-back from the legacy session route and `HevyClient.post_workout` (2026-10-08).
 - Removed the unused `HEVY_API_KEY` variable and its CasaOS entry from `docker-compose.yml` (2026-10-08).
 - Posts to Hevy as the nearest half kilo (198 lb -> 90 kg); an RPE Hevy can't store is left blank.
+
+
+- Progress comparison dates and bodyweight provenance (2026-10-21): all summary tiles retain the shared first/last scored workout period, now showing full workout dates, endpoint bodyweights and source dates/ages/counts. `/progress/data` adds nullable `bodyweight_source_date`, `bodyweight_age_days` and `bodyweight_weigh_in_count`. Bodyweight remains the seven-day average at the latest available weigh-in, carried forward through day 14; day 15 is unavailable. Progress-only metadata leaves fatigue calculations and stored measurements intact. Responsive intermediate date ticks include full years; missing observations break every chart line. Hover, tap and keyboard focus show session details including unavailable values; arrow keys move between sessions. Checks: Python suite and `node tests/test_progress_ui.cjs`; mocked phone/desktop browser inspection could not complete because the browser tool timed out reaching the local preview.
