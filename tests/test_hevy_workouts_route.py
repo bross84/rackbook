@@ -99,6 +99,22 @@ class TestListHevyWorkouts(WorkoutsRouteCase):
         s = self.client.get("/hevy/workouts").json()["workouts"][0]["exercises"][0]["sets"][0]
         self.assertIsNone(s["rpe"])
 
+    def test_one_movement_that_does_not_line_up_does_not_hide_the_others(self):
+        squat = RAW_PAGE["workouts"][0]["exercises"][0]
+        bench = {**squat, "title": "Bench", "exercise_template_id": "tpl-bench",
+                 "sets": [{"index": 0, "type": "normal", "weight_kg": 90, "reps": 5}]}
+        squat = {**squat, "sets": [{"index": 0, "type": "normal", "weight_kg": 120, "reps": 5}]}
+        self.hevy.list_workouts.return_value = {**RAW_PAGE, "workouts": [{**RAW_PAGE["workouts"][0], "exercises": [squat, bench]}]}
+        self._record(3, 7)  # squat: reps differ from Hevy, so it must stay as Hevy has it
+        import set_log
+        set_log.record([{
+            "hevy_workout_id": "w1", "workout_title": "Day 1", "workout_start": "2026-09-30T17:00:00+00:00",
+            "workout_end": None, "exercise_template_id": "tpl-bench", "exercise_title": "Bench",
+            "set_number": 1, "set_type": "normal", "weight_kg": 90, "reps": 5, "rpe": 5, "is_ts": 0}])
+        ex = self.client.get("/hevy/workouts").json()["workouts"][0]["exercises"]
+        self.assertIsNone(ex[0]["sets"][0]["rpe"])
+        self.assertEqual(5.0, ex[1]["sets"][0]["rpe"])
+
     def test_passes_paging_through_to_hevy(self):
         self.client.get("/hevy/workouts?page=2&page_size=5")
         self.hevy.list_workouts.assert_called_once_with(page=2, page_size=5)

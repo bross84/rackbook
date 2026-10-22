@@ -109,17 +109,23 @@ def for_workouts(hevy_workout_ids: list[str]) -> dict[str, list[dict[str, Any]]]
 def overlay_summary_rpe(summary: dict[str, Any], local_rows: list[dict[str, Any]]) -> dict[str, Any]:
     """
     A summarized Hevy workout (workout_view.summarize_workout) with the RPEs Hevy dropped filled back in from our record.
-    Same safety rule as overlay_exact_rpe: only when both sides hold the same sets, with the same reps and type, in order.
+    Matched per movement, so one movement that no longer lines up cannot hide the RPEs of the others. A movement is
+    only filled when both sides hold the same sets, with the same reps and type, in the same order.
     """
-    sets = [s for ex in summary["exercises"] for s in ex["sets"]]
-    if not local_rows or len(sets) != len(local_rows):
-        return summary
-    if any(s.get("reps") != r.get("reps") or (s.get("type") or "normal") != r.get("set_type")
-           for s, r in zip(sets, local_rows)):
-        return summary
-    for s, r in zip(sets, local_rows):
-        if s.get("rpe") is None and r.get("rpe") is not None:
-            s["rpe"] = r["rpe"]
+    mine: dict[str, list[dict[str, Any]]] = {}
+    for row in local_rows:
+        mine.setdefault(row["exercise_template_id"], []).append(row)
+    for exercise in summary["exercises"]:
+        rows = mine.get(exercise.get("exercise_template_id")) or []
+        sets = exercise["sets"]
+        if len(sets) != len(rows):
+            continue
+        if any(s.get("reps") != r.get("reps") or (s.get("type") or "normal") != r.get("set_type")
+               for s, r in zip(sets, rows)):
+            continue
+        for s, r in zip(sets, rows):
+            if s.get("rpe") is None and r.get("rpe") is not None:
+                s["rpe"] = r["rpe"]
     return summary
 
 
