@@ -148,6 +148,32 @@ Tests: `python -m unittest discover -s tests -t .`
 
 ## Deployment
 
+### Homelab updates with the Hevy Fatigue bridge
+
+From `/var/lib/docker-data/AppData/rackbook` on the server, run:
+
+```bash
+git pull --ff-only && docker compose -f docker-compose.yml -f docker-compose.fatigue-bridge.yml up -d --build rackbook
+```
+
+Use both Compose files on every update to keep the daily check-in bridge connected. Compose reads the server's `.env` file alongside them, which must contain:
+
+```dotenv
+HEVY_FATIGUE_DATA_VOLUME=hevy-fatigue_hevy-data
+```
+
+This server-specific `.env` file stays on the server and is not committed to Git. The bridge mounts the existing Hevy Fatigue volume read-only.
+
+Verify that Rackbook can read the check-in:
+
+```bash
+curl -fsS "http://localhost:8126/fatigue-trial/daily?day=$(date +%F)" | python3 -m json.tool
+```
+
+`available` means today's check-in was read; `stale` means an older check-in was read; `unavailable` means no check-in could be retrieved. Enable **Performance model trial** on the Log start screen to use check-ins in trial assessments.
+
+### Deployment without the bridge
+
 ```bash
 docker compose up -d --build
 ```
