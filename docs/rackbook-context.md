@@ -9,6 +9,8 @@ Optional fatigue trial (2026-10-23): disabled-by-default recording/reveal panel 
 
 Automatic trial recording (2026-10-24): when enabled, the log records each unstarted movement after 1.5 seconds without edits once soreness and planned reps/RPE/weight are available. No record button is needed. Snapshots remain immutable, unknown answers stay unknown, late recordings remain excluded, and failures never block logging. Enter scores and wait for the recorded status before lifting; see the trial guide for details.
 
+Model trial dashboard (2026-10-24): `/trial` and read-only `GET /fatigue-trial/dashboard` show named movements, separate model/mode cohorts, categorical expected/actual history, frozen pre-workout scores and saved set details. All history is available; unsaved snapshots are separated and reveal no predictions. They do not start the review clock or dilute coverage; review begins six weeks after recording the first saved prospective observation. Newly completed records also freeze the actual representative set; older records display available local saved measurements. Shared Chart.js controls support date ranges, zoom and tap/keyboard inspection. No Hevy calls or trial-record edits are performed by the dashboard.
+
 ---
 
 ## What this is now
@@ -54,6 +56,7 @@ The six main pages share an inline `rackbook-theme` style block for the blue/sla
 | `/recent` | `recent.html` | Latest Hevy workouts |
 | `/progress` | `progress.html` | Each main lift's e1RM, 7-day bodyweight and DOTS-style score over time |
 | `/stress` | `stress.html` | Main three movement overview, selector, stress components, rolling totals, and retrospective session history |
+| `/trial` | `trial.html` | Model trial observations, expected/actual performance history, collection progress and unsaved snapshots |
 | `/rpe-charts` | `rpe_charts.html` | RPE tables built from the user's own sets (Squat, Bench, Deadlift, General tabs) |
 | `/legacy` | `index.html` | Settings only: Hevy API key, exercise cache sync, unit preference (the old 5/3/1 Workout and Program tabs were removed 2026-10-19; their backend routes remain) |
 | `/health` | | `{"status":"ok"}` |

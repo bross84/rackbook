@@ -3,7 +3,7 @@ const RackbookCharts = (() => {
   const DAY=86400000, live=new Set(), names=['None','Mild','Moderate','Severe'];
   const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;};
   const fullDate=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
-  const valueText=(v,categorical)=>Number.isFinite(v)?(categorical?names[v]:Number(v.toFixed(1)).toString()):'Unavailable';
+  const valueText=(v,categorical,labels=names)=>Number.isFinite(v)?(categorical?(labels[v]??'Unavailable'):Number(v.toFixed(1)).toString()):'Unavailable';
   function dateTicks(start,end,width) {
     const first=Math.ceil(start/DAY)*DAY,last=Math.floor(end/DAY)*DAY;
     const count=Math.min(width<500?3:7,Math.round((last-first)/DAY)+1);
@@ -51,9 +51,9 @@ const RackbookCharts = (() => {
     });
     from.value=from.min;to.value=to.max;
     const detailLines=i=>{
-      const r=rows[i],lines=config.series.map(([k,label])=>[label,valueText(val(r,k),config.categorical)]);
+      const r=rows[i],lines=config.series.map(([k,label])=>[label,valueText(val(r,k),config.categorical,config.valueLabels)]);
       if(config.stress)lines.push(['Usual window',Number.isFinite(r.window?.lower)&&Number.isFinite(r.window?.upper)?valueText(r.window.lower)+'–'+valueText(r.window.upper):'Unavailable']);
-      if(config.categorical)lines.push(['Pain/injury',r.pain?'Flagged':'Not flagged']);
+      if(config.categorical&&!config.valueLabels)lines.push(['Pain/injury',r.pain?'Flagged':'Not flagged']);
       if(config.baselineStart&&times[i]<Date.parse(config.baselineStart))lines.push(['Baseline','Before current baseline']);
       return lines;
     };
@@ -94,7 +94,7 @@ const RackbookCharts = (() => {
     requestAnimationFrame(()=>{
       if(!box.isConnected){state.destroy();return;}
       if(typeof Chart!=='function'){box.replaceChildren(node('p','error','Chart files could not load. Refresh to try again.'));live.delete(state);return;}
-      const c=colors(),datasets=config.series.map(([key,label,color])=>({label,data:rows.map((r,i)=>({x:times[i],y:Number.isFinite(val(r,key))?val(r,key):null})),borderColor:color,backgroundColor:color,borderWidth:2,pointRadius:rows.length>80?1.5:2.5,pointHoverRadius:5,pointHitRadius:12,pointBorderWidth:1,pointBorderColor:config.stress?rows.map(r=>key==='total'&&r.score?.total>r.window?.upper?c.error:color):c.card,
+      const c=colors(),datasets=config.series.map(([key,label,color],seriesIndex)=>({label,data:rows.map((r,i)=>({x:times[i],y:Number.isFinite(val(r,key))?val(r,key):null})),borderColor:color,backgroundColor:color,borderWidth:2,pointStyle:config.valueLabels?(seriesIndex===0?'triangle':'circle'):'circle',pointRadius:config.valueLabels?(seriesIndex===0?7:3):rows.length>80?1.5:2.5,pointHoverRadius:8,pointHitRadius:12,pointBorderWidth:1,pointBorderColor:config.stress?rows.map(r=>key==='total'&&r.score?.total>r.window?.upper?c.error:color):c.card,
         pointBackgroundColor:config.stress?rows.map(r=>key==='total'&&r.score?.total>r.window?.upper?c.error:key==='total'&&r.score?.total<r.window?.lower?c.card:color):rows.map((r,i)=>config.baselineStart&&times[i]<Date.parse(config.baselineStart)?c.muted:color),
         tension:.15,spanGaps:false,showLine:!config.categorical,fill:false,
         segment:config.stress?{}:{borderColor:ctx=>times[ctx.p1DataIndex]-times[ctx.p0DataIndex]>=21*DAY?'transparent':undefined}
@@ -105,7 +105,7 @@ const RackbookCharts = (() => {
       instance=new Chart(canvas,{type:'line',data:{datasets},plugins:[decoration],options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'nearest',axis:'x',intersect:false},onHover:inspect,onClick:inspect,
         plugins:{legend:{display:config.stress,position:'bottom',align:'start',labels:{filter:item=>!item.text.startsWith('Usual window '),color:c.muted,boxWidth:12,boxHeight:2,padding:14,font:{size:11}}},tooltip:{enabled:false},zoom:{limits:{x:{min:first,max:last,minRange:DAY}},pan:{enabled:true,mode:'x',modifierKey:'shift',onPan:gesture},zoom:{mode:'x',wheel:{enabled:true,modifierKey:'ctrl',speed:.12},pinch:{enabled:true},drag:{enabled:true,backgroundColor:'rgba(74,121,245,.12)',borderColor:'#4a79f5',borderWidth:1,threshold:12},onZoom:gesture}}},
         scales:{x:{type:'linear',min:start,max:end,border:{display:false},grid:{color:c.grid,lineWidth:.5},afterBuildTicks:scale=>{scale.ticks=dateTicks(scale.min,scale.max,scale.width);},ticks:{color:c.muted,font:{size:10},maxRotation:0,autoSkip:true,callback:fullDate}},
-          y:{border:{display:false},grid:{color:c.grid,lineWidth:.5},...(config.categorical?{min:0,max:3}:{}),ticks:{color:c.muted,font:{size:10},maxTicksLimit:5,...(config.categorical?{stepSize:1}:config.series[0][0]==='working_sets'?{precision:0}:{}),callback:v=>valueText(v,config.categorical)}}}}});
+          y:{border:{display:false},grid:{color:c.grid,lineWidth:.5},...(config.categorical?{min:config.valueLabels?-.15:0,max:config.valueLabels?config.valueLabels.length-1+.15:3}:{}),...(config.valueLabels?{afterBuildTicks:scale=>{scale.ticks=config.valueLabels.map((_,i)=>({value:i}));}}:{}),...(config.bounds||{}),ticks:{color:c.muted,font:{size:10},maxTicksLimit:5,...(config.categorical?{stepSize:1}:config.series[0][0]==='working_sets'?{precision:0}:{}),callback:v=>valueText(v,config.categorical,config.valueLabels)}}}}});
       setWindow(first,last,false);
     });
     return box;

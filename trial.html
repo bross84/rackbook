@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f5f8" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111923" />
+  <title>Model trial · Rackbook</title>
+  <style>
+    :root { --bg:#f6f5f1; --card:#fff; --text:#1d1d1b; --muted:#6b6a64; --line:#e3e1d9; --accent:#1f5fbf; --peripheral:#377a58; --central:#a76118; --error:#a32d2d; }
+    @media(prefers-color-scheme:dark) { :root { --bg:#161614; --card:#21211e; --text:#ecebe5; --muted:#a09f97; --line:#34332f; --accent:#7fb0ff; --peripheral:#7ec79b; --central:#e8a15c; --error:#f09595; } }
+    * { box-sizing:border-box; } [hidden] { display:none !important; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { max-width:1100px; margin:auto; padding:16px; }
+    header, .controls { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    nav { display:flex; gap:14px; flex-wrap:wrap; } a { color:var(--accent); }
+    h1 { font-size:22px; font-weight:500; margin:8px 0; } h2 { font-size:18px; font-weight:500; margin:0 0 8px; }
+    h3 { font-size:15px; font-weight:500; margin:0 0 6px; } p { margin:6px 0; }
+    .note, small { color:var(--muted); font-size:13px; } .intro { margin:6px 0 16px; }
+    button, select { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:10px; min-height:44px; padding:8px 12px; }
+    button { cursor:pointer; } select { max-width:100%; } label { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+    .controls { margin:0 0 12px; } .controls label:first-child { flex:1; } #movement { width:min(100%,410px); }
+    .overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .movement-card { text-align:left; padding:14px; border-radius:12px; min-width:0; }
+    .movement-card[aria-pressed="true"] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+    .movement-card span { display:block; } .card-title { font-weight:600; } .card-score { font-size:24px; font-variant-numeric:tabular-nums; }
+    .card { border:1px solid var(--line); border-radius:12px; background:var(--card); padding:16px; margin-bottom:12px; }
+    .metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .metric strong { display:block; font-size:25px; font-weight:500; font-variant-numeric:tabular-nums; } .metric span { font-size:13px; color:var(--muted); }
+    .metric small { display:block; font-size:12px; }
+    .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:13px; margin:8px 0; } .legend span:before { content:""; display:inline-block; width:12px; height:3px; vertical-align:middle; margin-right:6px; background:var(--accent); }
+    .legend .ps:before { background:var(--peripheral); } .legend .cs:before { background:var(--central); }
+    .legend .window:before { height:10px; background:var(--accent); opacity:.25; border:1px dashed currentColor; }
+    svg { width:100%; height:auto; display:block; } svg text { fill:var(--muted); font:12px system-ui,sans-serif; }
+    .table-scroll { overflow-x:auto; } table { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+    th,td { text-align:right; padding:10px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+    th:first-child,td:first-child { text-align:left; } th { color:var(--muted); font-weight:500; }
+    td small { display:block; white-space:normal; min-width:120px; max-width:220px; } caption { text-align:left; font-size:13px; color:var(--muted); margin-bottom:8px; }
+    .view-links { display:flex; justify-content:flex-end; gap:12px; margin:8px 0 12px; }
+    #dashboardLink { margin-right:auto; }
+    .compact-stress-chart { max-height:280px; }
+    .compact-stress-chart text { font-size:16px; }
+    .dashboard-heading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    .dashboard-summary { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:8px 0; }
+    .dashboard-summary strong { font-size:16px; font-weight:500; }
+    .dashboard-plots { margin-top:8px; }
+    .relationship-feedback { padding:10px 12px; border-radius:8px; background:var(--accent-soft, var(--bg)); margin:8px 0 0; }
+    .relationship-feedback:empty { display:none; }
+    .relationship-feedback.error { background:var(--card); }
+    body.dashboard-view .movement-card .note { font-size:12px; }
+    @media(max-width:620px) { body.dashboard-view .overview { grid-template-columns:repeat(3,minmax(0,1fr)); } body.dashboard-view .movement-card { padding:10px 8px; } .controls label:first-child { flex:1 0 100%; } }
+    .relationship-row { padding:12px 0; border-bottom:1px solid var(--line); }
+    .relationship-options { display:flex; flex-wrap:wrap; gap:6px 16px; margin:8px 0; }
+    .relationship-options label { min-height:44px; }
+    .relationship-options input { width:20px; height:20px; accent-color:var(--accent); }
+    .relationship-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+    .context-summary { padding:10px 12px; background:var(--soft, var(--bg)); border-radius:10px; margin:12px 0; }
+    .observation-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0; }
+    .observation-grid figure { margin:0; min-width:0; }
+    .observation-grid svg text { font-size:16px; }
+    .observation-grid figcaption { font-size:14px; font-weight:600; }
+    .collection-progress { display:block; width:100%; height:12px; margin:8px 0 12px; accent-color:var(--accent); }
+    @media(max-width:620px) { .observation-grid { grid-template-columns:1fr; } }
+    .error { color:var(--error); } summary { cursor:pointer; min-height:44px; padding:10px 0; } #detail[aria-busy="true"] { opacity:.6; }
+    @media(max-width:620px) { .overview { grid-template-columns:1fr; gap:8px; } .movement-card { padding:10px 12px; } .movement-card .card-score { font-size:20px; } .metrics { gap:6px; } .metric strong { font-size:22px; } .card { padding:12px; } }
+
+    .page-heading { display:flex; align-items:center; gap:8px; min-width:0; }
+    .page-back { flex-shrink:0; min-height:44px; padding:4px 8px; border:0; border-radius:8px; background:transparent; color:var(--accent,currentColor); font:inherit; font-size:14px; cursor:pointer; white-space:nowrap; }
+    .page-back:disabled { opacity:.4; cursor:default; }
+    .page-back:focus-visible { outline:2px solid var(--accent,currentColor); outline-offset:2px; }
+
+    .range-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
+    .segmented { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+    .segmented button { border:0; border-right:1px solid var(--line); padding:4px 10px; min-height:28px; font-size:11px; color:var(--muted); background:var(--card); white-space:nowrap; }
+    .segmented button:last-child { border-right:0; }
+    .segmented button[aria-pressed="true"] { background:var(--accent); color:var(--card); }
+    .zoom-actions { display:flex; gap:3px; margin-left:auto; }
+    .zoom-actions button,.session-step { min-height:30px; min-width:30px; padding:3px 8px; border:1px solid var(--line); border-radius:5px; background:var(--card); color:var(--muted); font-size:12px; }
+    .plot-wrap { height:260px; position:relative; width:100%; min-width:0; }
+    .plot-wrap canvas { touch-action:pan-y !important; }
+    .plot-wrap canvas:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    .stress-chart .chart-note,.stress-chart .note { font-size:11px; color:var(--muted); line-height:1.55; margin:8px 0 0; }
+    .chart-tooltip { position:absolute; z-index:2; width:250px; max-width:calc(100% - 12px); padding:10px 12px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); box-shadow:var(--shadow); font-size:11px; pointer-events:none; }
+    .chart-tooltip strong { display:block; margin-bottom:6px; font-size:12px; }
+    .tooltip-row { display:flex; justify-content:space-between; gap:16px; color:var(--muted); }
+    .tooltip-row b { color:var(--text); font-weight:550; }
+    .chart-tooltip .note { border-top:1px solid var(--line); padding-top:6px; margin-top:6px; font-size:10px; }
+    @media(max-width:800px) { .plot-wrap {height:230px;} }
+    @media(max-width:480px) {
+      .plot-wrap {height:220px;} .range-row {gap:8px 4px;} .segmented {flex:1;}
+      .segmented button {flex:1;padding:6px 7px;min-height:36px;}
+      .zoom-actions {width:100%;justify-content:flex-end;} .zoom-actions button {min-height:36px;min-width:36px;}
+    }
+    @media(max-width:350px) {
+      .segmented {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex-basis:100%;}
+      .segmented button:nth-child(-n+3) {border-bottom:1px solid var(--line);}
+      .segmented button:nth-child(3) {border-right:0;}
+    }
+.legend {display:none;} .stress-chart { min-width:0; } .stress-chart .chart-selection {font-size:11px;color:var(--muted);margin-top:8px;min-height:34px} .stress-chart input {min-width:0;max-width:145px;font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:5px} .stress-chart .range-row {font-size:11px} .observation-grid figure {min-width:0;}
+</style>
+  <style id="rackbook-theme">
+
+    /* Rackbook visual system: kept inline so every page remains self-contained. */
+    :root {
+      color-scheme: light;
+      --bg: #f3f5f8; --card: #ffffff; --text: #17243a; --muted: #59687c;
+      --line: #dce3ec; --accent: #2459b8; --chip: #edf1f7; --soft: #f7f9fc;
+      --accent-soft: #edf3ff; --done: #edf7f1; --done-line: #28784b;
+      --shadow: 0 2px 5px rgba(23,36,58,.025), 0 10px 28px rgba(23,36,58,.035);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #111923; --card: #1a2533; --text: #e8eef8; --muted: #a5b4c9;
+        --line: #344358; --accent: #95baff; --chip: #243246; --soft: #202d3d;
+        --accent-soft: #243b5b; --done: #20392f; --done-line: #3f825f;
+        --shadow: 0 4px 20px rgba(0,0,0,.12);
+      }
+    }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    main { max-width: 1120px; padding: 24px; margin: 0 auto; }
+    .app-header { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 16px; margin: 0 0 24px; }
+    .page-heading { gap: 12px; }
+    .page-title { min-width: 0; }
+    .eyebrow { display: block; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .18em; margin: 0 0 3px; }
+    .page-title h1 { font-size: 26px; font-weight: 700; letter-spacing: -.035em; line-height: 1.2; margin: 0; }
+    .app-header .page-back { width: auto; padding: 0 10px; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font-size: 13px; }
+    .header-tools { justify-self: end; }
+    .app-header .app-nav { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; padding: 5px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; white-space: normal; }
+    .app-header .app-nav a { display: flex; align-items: center; justify-content: center; flex: 1 0 auto; min-height: 40px; padding: 6px 14px; margin: 0; border-radius: 9px; color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 550; }
+    .app-header .app-nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+    .card { border-radius: 16px; border-color: var(--line); box-shadow: var(--shadow); margin-bottom: 16px; }
+    h2, h3, .wk-title, .ex-title { letter-spacing: -.02em; font-weight: 650; }
+    button, input, select { transition: border-color .12s ease, background-color .12s ease, box-shadow .12s ease; }
+    button { font-weight: 550; }
+    button.primary { font-weight: 650; color: var(--card); }
+    button:disabled { cursor: default; }
+    :where(button, a, input, select, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    input, select { accent-color: var(--accent); }
+    .lifts { gap: 6px; padding: 5px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); margin-bottom: 20px; }
+    .lifts button { border-color: transparent; background: transparent; min-height: 44px; font-weight: 600; }
+    .lifts button.on, .lifts button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+    .movement-card { padding: 18px; background: var(--card); border-radius: 16px; box-shadow: var(--shadow); }
+    .movement-card[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+    .card-score { font-size: 30px; font-weight: 700; letter-spacing: -.04em; margin: 8px 0; }
+    .metrics { gap: 16px; }
+    .metric { padding: 12px; border-radius: 12px; background: var(--soft); }
+    .metric strong { font-size: 28px; font-weight: 700; letter-spacing: -.03em; }
+    .controls { gap: 12px; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 16px; }
+    .controls label { font-size: 13px; color: var(--muted); font-weight: 550; }
+    .controls select { color: var(--text); background: var(--soft); }
+    th { font-weight: 600; }
+    .wk-head { flex-wrap: wrap; gap: 4px 12px; }
+    .wk-meta { margin-top: 6px; }
+    .intro { line-height: 1.65; }
+    @media (hover: hover) {
+      .app-header .app-nav a:hover { background: var(--soft); color: var(--text); }
+      button:not(:disabled):hover { border-color: var(--accent); }
+    }
+    @media (max-width: 599px) {
+      main { padding: 16px 12px; }
+      .app-header { gap: 12px; margin-bottom: 18px; }
+      .page-heading { gap: 8px; }
+      .page-title h1 { font-size: 23px; }
+      .app-header .app-nav a { flex: 1 0 28%; padding: 6px 8px; min-height: 44px; font-size: 13px; }
+      .card { border-radius: 14px; }
+      .metric { padding: 10px 8px; }
+      .metric strong { font-size: 23px; }
+      .controls { padding: 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="app-header">
+    <div class="page-heading"><a href="/log" class="page-back">← Log</a><h1>Model trial</h1></div>
+    <nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/trial" aria-current="page">Model trial</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
+  </header>
+  <p class="intro note">Compare frozen expectations with saved workout performance. The trial tests fixed experimental rules; it does not change your training.</p>
+  <section class="card controls" aria-label="Trial filters">
+    <label>Movement <select id="movement"></select></label>
+    <label>Trial group <select id="cohort"></select></label>
+    <label>History <select id="range"><option value="56">8 weeks</option><option value="182">6 months</option><option value="0">All</option></select></label>
+    <button id="refresh" type="button">Refresh</button>
+  </section>
+  <p id="status" role="status" aria-live="polite">Loading trial observations…</p>
+  <div id="content" hidden>
+    <section id="summary" class="card" aria-label="Collection progress"></section>
+    <section class="card"><h2>Expected vs actual performance</h2><p class="note">Blue triangles: expected · Green circles: actual. These are categories, not predicted weights. Uncertain expectations and unclassified outcomes remain gaps; the session history shows their labels. Late entries are shown but excluded from evaluation.</p><div id="comparison"></div></section>
+    <section class="card"><h2>Pre-workout observations</h2><p class="note">Frozen at recording time. Movement soreness uses 0–3; daily tiredness and poor recovery retain Hevy Fatigue’s 0–4 scale. Missing daily check-ins remain gaps.</p><div id="observations" class="observation-grid"></div></section>
+    <section class="card"><h2>Saved session history</h2><div id="sessions"></div></section>
+    <details class="card"><summary id="pendingTitle">Not saved</summary><p class="note">These snapshots have no saved workout. They may belong to an open or discarded draft. They reveal no predictions, count toward no eligible comparisons, and do not start the review clock.</p><div id="pending"></div></details>
+  </div>
+</main>
+<script src="/static/vendor/chart-4.4.0.umd.js"></script>
+<script src="/static/vendor/hammer-2.0.8.min.js"></script>
+<script src="/static/vendor/chartjs-plugin-zoom-2.2.0.min.js"></script>
+<script src="/static/stress-charts.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;};
+const trialLabels={near_usual:'Near usual',below_usual:'Below usual',uncertain:'Uncertain',unclassified:'Unclassified'};
+let dashboard={entries:[],cohorts:[]};
+function category(value){return value==='below_usual'?0:value==='near_usual'?1:null;}
+function trialPoints(entries){return entries.map(r=>({start_time:r.workout_start,expected:category(r.prediction),actual:category(r.observed),soreness:r.soreness??null,pain:r.pain,
+ tiredness:r.daily?.status==='available'?(r.daily.ratings.tiredness??null):null,
+ recovery:r.daily?.status==='available'?(r.daily.ratings.perceived_recovery??null):null}));}
+function filteredEntries(entries,movement,group,days,now=Date.now()){
+ return entries.filter(r=>r.exercise_template_id===movement&&r.status==='completed'&&JSON.stringify([r.model_version,r.mode])===group&&(!days||Date.parse(r.workout_start)>=now-days*86400000));
+}
+function dateText(value){return new Date(value).toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+function setText(s){return s?`${s.weight_kg??'?'} kg × ${s.reps??'?'} @${s.rpe??'?'}`:'Unavailable';}
+function options(box,items,previous){box.replaceChildren();for(const [value,label] of items){const o=el('option',null,label);o.value=value;box.append(o);}if(items.some(([v])=>v===previous))box.value=previous;}
+function selectMovement(){
+ const groups=dashboard.cohorts.filter(c=>c.exercise_template_id===$('movement').value);
+ options($('cohort'),groups.map(c=>[JSON.stringify([c.model_version,c.mode]),`${c.mode==='strength'?'Strength · marked TS':'Hypertrophy · first working set'} · ${c.model_version}`]),$('cohort').value);
+ renderDashboard();
+}
+function renderDashboard(){
+ const movement=$('movement').value,group=$('cohort').value,days=Number($('range').value);
+ const cohort=dashboard.cohorts.find(c=>c.exercise_template_id===movement&&JSON.stringify([c.model_version,c.mode])===group);
+ const rows=filteredEntries(dashboard.entries,movement,group,days),points=trialPoints(rows);
+ const summary=$('summary');summary.replaceChildren();
+ summary.append(el('h2',null,cohort?.title||'No observations yet'));
+ if(cohort){
+  summary.append(el('p',null,`${cohort.eligible_predictions} / ${cohort.required_predictions} eligible comparisons · ${cohort.observations} completed prospective observations (all history)`));
+  const p=el('progress','collection-progress');p.max=cohort.required_predictions;p.value=Math.min(cohort.eligible_predictions,p.max);p.setAttribute('aria-label','Eligible comparisons');summary.append(p);
+  summary.append(el('p','note',cohort.review_at?`Review from ${dateText(cohort.review_at)} · ${cohort.status}`:'Review clock starts with the first saved prospective observation.'));
+  const metrics=cohort.metrics.candidate;
+  summary.append(el('p','note',`${metrics.missed_below_usual} missed below-usual sessions · ${metrics.unnecessary_warnings} warnings followed by near-usual performance · ${Math.round(metrics.coverage*100)}% classifiable coverage. No accuracy claim while collection is inconclusive.`));
+ }
+ $('comparison').replaceChildren(points.some(p=>p.expected!==null||p.actual!==null)?RackbookCharts.create(points,{title:'Expected vs actual performance',categorical:true,valueLabels:['Below usual','Near usual'],series:[['expected','Expected','#4a79f5'],['actual','Actual','#279b78']]}):el('p','note',rows.length?'No classifiable expectations or outcomes yet. See saved sessions below for uncertain/unclassified results.':'No saved trial observations in this range.'));
+ const observations=$('observations');observations.replaceChildren();
+ for(const [key,title,color,bounds] of [['soreness','Movement soreness · 0–3','#4a79f5',{min:0,max:3}],['tiredness','Daily tiredness · 0–4','#d99132',{min:0,max:4}],['recovery','Daily poor recovery · 0–4','#9c79db',{min:0,max:4}]]){
+  const fig=el('figure');fig.append(el('figcaption',null,title),RackbookCharts.create(points,{title,bounds,series:[[key,title,color]],categorical:key==='soreness'}));observations.append(fig);
+ }
+ const sessions=$('sessions');sessions.replaceChildren();
+ if(!rows.length)sessions.append(el('p','note','No saved trial workouts in this range. Log and save a workout with the trial enabled to begin comparisons.'));
+ for(const r of rows.slice().reverse()){
+  const details=el('details');details.append(el('summary',null,`${dateText(r.workout_start)} · Expected: ${trialLabels[r.prediction]||'Unavailable'} · Actual: ${trialLabels[r.observed]||'Unavailable'}${r.prospective?'':' · Late entry (excluded)'}`));
+  details.append(el('p',null,`Planned: ${setText(r.planned)} · Saved: ${setText(r.actual)}`));
+  details.append(el('p','note',`Movement soreness: ${r.soreness??'Unknown'} / 3 · Pain/joint concern: ${r.pain?'Flagged':'Not flagged'}`));
+  details.append(el('p','note',`Daily check-in: ${r.daily?.status||'unavailable'}${r.daily?.date?' · '+r.daily.date:''} · Recorded ${dateText(r.recorded_at)}`));
+  for(const [key,value] of Object.entries(r.daily?.ratings||{}))details.append(el('p','note',key.replaceAll('_',' ')+': '+(value??'Unknown')+' / 4'));
+  for(const reason of r.reasons)details.append(el('p','note',reason));
+  for(const note of r.notes)details.append(el('p','note',`${note.kind.replaceAll('_',' ')} · ${note.text}`));
+  sessions.append(details);
+ }
+ const pending=dashboard.entries.filter(r=>r.status==='recorded'&&r.exercise_template_id===movement&&(!days||Date.parse(r.workout_start)>=Date.now()-days*86400000));
+ $('pendingTitle').textContent=`Not saved · ${pending.length} snapshots for this movement in range`;
+ $('pending').replaceChildren(...pending.slice().reverse().map(r=>el('p','note',`${dateText(r.workout_start)} · ${r.title} · No saved workout · Result hidden`)));
+ $('status').textContent=`${rows.length} saved observations in range. Select a session below for details. Charts support tap, hover and keyboard inspection.`;
+}
+async function loadDashboard(){
+ $('refresh').disabled=true;$('status').textContent='Loading trial observations…';$('content').hidden=true;
+ try{
+  const response=await fetch('/fatigue-trial/dashboard');if(!response.ok)throw Error('Could not load trial history ('+response.status+').');
+  dashboard=await response.json();
+  const movements=new Map(dashboard.entries.map(r=>[r.exercise_template_id,r.title]));
+  options($('movement'),[...movements].sort((a,b)=>a[1].localeCompare(b[1])),$('movement').value);
+  selectMovement();$('content').hidden=false;
+  if(!movements.size)$('status').textContent='No trial observations yet. Enable Performance model trial on the Log page, enter pre-workout scores and planned sets, then log normally.';
+ }catch(err){$('status').textContent=err.message+' Use Refresh to retry.';}
+ finally{$('refresh').disabled=false;}
+}
+$('movement').addEventListener('change',selectMovement);$('cohort').addEventListener('change',renderDashboard);$('range').addEventListener('change',renderDashboard);$('refresh').addEventListener('click',loadDashboard);
+loadDashboard();
+</script>
+</body>
+</html>

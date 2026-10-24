@@ -401,7 +401,7 @@
   <header class="app-header">
     <div class="page-heading"><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Log workout</h1></div></div>
     <div class="header-tools"><span class="units" role="group" aria-label="Weight unit"><button id="unitKg" type="button">kg</button><button id="unitLb" type="button">lb</button></span></div>
-    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
+    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/trial">Model trial</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <div id="msg"></div>
 
@@ -416,6 +416,7 @@
         <button id="trialEnabled" class="primary" type="button" aria-pressed="false" aria-describedby="trialOptinDescription trialSettingStatus" disabled>Enable model trial</button>
       </div>
       <p id="trialSettingStatus" class="hint" role="status">Loading trial setting…</p>
+      <p><a href="/trial">View model trial dashboard →</a></p>
       <details id="trialHistory" hidden><summary>Model trial history</summary><div></div></details>
     </section>
     <section id="plannedStart" class="card" hidden></section>
@@ -1192,16 +1193,18 @@
     box.append(details);
     $("trialHistory").hidden = false;
     try {
-      const results = await api("/fatigue-trial/comparisons");
+      const data = await api("/fatigue-trial/dashboard"), results = data.entries;
       const target = $("trialHistory").querySelector("div"); target.replaceChildren();
-      for (const r of results) {
-        const item = el("p", "hint", r.recorded_at.slice(0,10) + " · " + r.exercise_template_id + " · " +
+      for (const r of results.filter(r=>r.status==='completed').slice(-10).reverse()) {
+        const item = el("p", "hint", r.workout_start.slice(0,10) + " · " + r.title + " · " +
           (r.status === "completed" ? "Expected: " + r.prediction.replaceAll("_"," ") + "; observed: " + r.observed.replaceAll("_"," ") : "Trial recorded · Result hidden"));
         target.append(item);
       }
-      const evaluations = await api("/fatigue-trial/evaluation");
+      const pending=results.filter(r=>r.status==='recorded').length;
+      if(pending)target.append(el('p','hint',pending+' snapshots have no saved workout (open or discarded drafts). They do not count toward comparisons.'));
+      const evaluations = data.cohorts;
       for (const cohort of evaluations) {
-        target.append(el("p", "hint", cohort.exercise_template_id + " · " + cohort.eligible_predictions + "/12 eligible predictions · Review " + cohort.review_at.slice(0,10) + " · " + cohort.status));
+        target.append(el("p", "hint", cohort.title + " · " + cohort.eligible_predictions + "/12 eligible predictions · " + (cohort.review_at?'Review '+cohort.review_at.slice(0,10):'Awaiting first saved trial workout') + " · " + cohort.status));
       }
     } catch (_) {}
   }

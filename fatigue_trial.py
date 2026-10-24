@@ -84,6 +84,7 @@ class TrialResult(BaseModel):
     across_sessions: dict | None = None
     evidence: dict | None = None
     notes: list[dict] | None = None
+    actual: dict | None = None
 
 
 class CompletionInput(BaseModel):
@@ -101,7 +102,7 @@ class TrialEvaluation(BaseModel):
     mode: str
     eligible_predictions: int
     required_predictions: int = 12
-    review_at: str
+    review_at: str | None
     review_due: bool
     status: str
     metrics: dict
@@ -376,7 +377,8 @@ def complete(trial_id, workout_id):
                              observations, old["pattern"], timestamp(trial["workout_start"]))
         if snapshot["context"]["block_reasons"]:
             across.update(status="insufficient evidence", message="Workload/spacing context is not comparable. " + " ".join(snapshot["context"]["block_reasons"]))
-    completion = dict(observed=observed, across_sessions=across)
+    completion = dict(observed=observed, across_sessions=across,
+                      actual={k: row.get(k) for k in ('weight_kg', 'reps', 'rpe')} if row else None)
     with closing(get_db()) as conn, conn:
         conn.execute("UPDATE fatigue_trial_snapshots SET completion=?, hevy_workout_id=? WHERE id=? AND completion IS NULL",
                      (json.dumps(completion), workout_id, trial_id))
@@ -438,17 +440,18 @@ def evaluation(*, now=None):
         common=[r for r in scored if r["candidate"]!="uncertain" and r["subjective_only"]!="uncertain" and r["observed"]!="unclassified"]
         for model in ("candidate","subjective_only","always_near_usual"):
             eligible_rows=[r for r in scored if r[model]!="uncertain" and r["observed"]!="unclassified"]
-            metrics[model]=dict(eligible=len(eligible_rows), coverage=len(eligible_rows)/len(items),
+            metrics[model]=dict(eligible=len(eligible_rows), coverage=len(eligible_rows)/len(scored) if scored else 0,
                 missed_below_usual=sum(r[model]=="near_usual" and r["observed"]=="below_usual" for r in eligible_rows),
                 unnecessary_warnings=sum(r[model]=="below_usual" and r["observed"]=="near_usual" for r in eligible_rows))
             metrics[model].update(common_eligible=len(common),
                 common_missed_below_usual=sum(r[model]=="near_usual" and r["observed"]=="below_usual" for r in common),
                 common_unnecessary_warnings=sum(r[model]=="below_usual" and r["observed"]=="near_usual" for r in common))
         eligible_rows=[r for r in scored if r["candidate"]!="uncertain" and r["observed"]!="unclassified"]
-        review_at=timestamp(items[0][0]["recorded_at"])+timedelta(weeks=6)
+        completed_times=[timestamp(row['recorded_at']) for row,_ in items if row['completion'] and row['prospective']]
+        review_at=min(completed_times)+timedelta(weeks=6) if completed_times else None
         ready=len(eligible_rows)>=12 and {r["observed"] for r in eligible_rows}=={"near_usual","below_usual"}
         result.append(dict(model_version=version,exercise_template_id=exercise,mode=mode,
-            eligible_predictions=len(eligible_rows),review_at=review_at.isoformat(),review_due=now>=review_at,
-            status="ready for provisional review" if ready and now>=review_at else "inconclusive; continue collection",
-            metrics=metrics,observations=len(items),skipped=sum(r["exercise_template_id"]==exercise for r in skips)))
+            eligible_predictions=len(eligible_rows),review_at=review_at.isoformat() if review_at else None,review_due=bool(review_at and now>=review_at),
+            status="ready for provisional review" if ready and review_at and now>=review_at else "inconclusive; continue collection",
+            metrics=metrics,observations=len(scored),skipped=sum(r["exercise_template_id"]==exercise for r in skips)))
     return result

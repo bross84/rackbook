@@ -22,6 +22,7 @@ from database import get_db, get_rpe_percentage, init_db
 import soreness
 import fatigue
 import fatigue_trial
+import trial_dashboard
 import fatigue_relationships
 import body_weight
 import hevy_client
@@ -81,6 +82,16 @@ def trial_comparisons():
 @app.get("/fatigue-trial/evaluation", response_model=list[fatigue_trial.TrialEvaluation])
 def trial_evaluation():
     return fatigue_trial.evaluation()
+
+
+@app.get('/trial', include_in_schema=False)
+def trial_page():
+    return FileResponse('trial.html', headers=NO_CACHE)
+
+
+@app.get('/fatigue-trial/dashboard', response_model=trial_dashboard.Dashboard, response_model_exclude_none=True)
+def trial_dashboard_data():
+    return trial_dashboard.dashboard()
 
 
 @app.put("/fatigue-trial/settings", response_model=fatigue_trial.TrialStatus)

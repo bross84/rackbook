@@ -48,6 +48,61 @@ class TrialCase(unittest.TestCase):
         self.assertNotIn("across_sessions", response)
         self.assertTrue(response["prospective"])
 
+    def test_dashboard_unsaved_snapshots_hide_results_and_do_not_start_review(self):
+        trial.configure(True)
+        record = trial.record(self.payload(soreness=0), now=NOW)
+        with closing(get_db()) as conn, conn:
+            conn.execute('INSERT INTO hevy_exercise_cache(id,title) VALUES (?,?)', ('squat', 'Low-bar squat'))
+        response = self.client.get('/fatigue-trial/dashboard')
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        entry = data['entries'][0]
+        self.assertEqual(entry['title'], 'Low-bar squat')
+        self.assertEqual(entry['id'], record['id'])
+        for key in ('prediction', 'observed', 'daily', 'planned', 'actual', 'soreness', 'mode'):
+            self.assertNotIn(key, entry)
+        cohort = data['cohorts'][0]
+        self.assertEqual(cohort['observations'], 0)
+        self.assertEqual(cohort['eligible_predictions'], 0)
+        self.assertFalse(cohort['review_due'])
+        self.assertEqual(cohort['metrics']['candidate']['coverage'], 0)
+        self.assertNotIn('review_at', cohort)
+
+    def test_dashboard_saved_observations_and_review_clock_ignore_old_unsaved(self):
+        trial.configure(True)
+        old = trial.record(self.payload(soreness=3), now=NOW)
+        with closing(get_db()) as conn, conn:
+            conn.execute('UPDATE fatigue_trial_snapshots SET recorded_at=? WHERE id=?', ((NOW-timedelta(days=40)).isoformat(), old['id']))
+        new = self.payload(soreness=0).model_copy(update={'session_key': 'new'})
+        record = trial.record(new, now=NOW)
+        with closing(get_db()) as conn, conn:
+            conn.execute("INSERT INTO logged_sets(hevy_workout_id,workout_start,exercise_template_id,exercise_title,set_number,set_type,weight_kg,reps,rpe,is_ts) VALUES (?,?,?,'Squat',1,'normal',100,1,8,1)",
+                         ('saved', new.workout_start.isoformat(), 'squat'))
+        trial.complete(record['id'], 'saved')
+        data = self.client.get('/fatigue-trial/dashboard').json()
+        entry = next(e for e in data['entries'] if e['id'] == record['id'])
+        self.assertEqual(entry['title'], 'Squat')
+        self.assertEqual(entry['actual'], dict(weight_kg=100, reps=1, rpe=8))
+        self.assertEqual(entry['planned'], dict(weight_kg=100, reps=1, rpe=8))
+        self.assertEqual(entry['soreness'], 0)
+        self.assertEqual(entry['prediction'], 'uncertain')
+        self.assertEqual(entry['observed'], 'unclassified')
+        cohort = data['cohorts'][0]
+        self.assertEqual(cohort['observations'], 1)
+        self.assertEqual(cohort['review_at'], (NOW+timedelta(weeks=6)).isoformat())
+        # Actual set measurements are frozen for newly completed records.
+        with closing(get_db()) as conn, conn:
+            conn.execute("UPDATE logged_sets SET weight_kg=200 WHERE hevy_workout_id='saved'")
+        entry = next(e for e in self.client.get('/fatigue-trial/dashboard').json()['entries'] if e['id'] == record['id'])
+        self.assertEqual(entry['actual']['weight_kg'], 100)
+
+    def test_dashboard_empty_and_page(self):
+        self.assertEqual(self.client.get('/fatigue-trial/dashboard').json(), dict(entries=[], cohorts=[]))
+        response = self.client.get('/trial')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Expected vs actual performance', response.text)
+        self.assertEqual(response.headers['cache-control'], 'no-cache')
+
     def test_server_started_and_late_entries(self):
         trial.configure(True)
         trial.mark_started(trial.MovementStart(session_key="session", exercise_template_id="squat"))
