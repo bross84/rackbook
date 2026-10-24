@@ -9,9 +9,11 @@ function el(tag,cls,text) {
 }
 const elements = new Map();
 const $ = id => { if(!elements.has(id)) elements.set(id,el('div')); return elements.get(id); };
-let calls=[], saves=0;
+let calls=[], saves=0, failSettings=false;
 const context = vm.createContext({el,$,Date,JSON,Number,Boolean,encodeURIComponent,
-  cardEls:new Map(),saveDraft(){saves++},api:async(url,options)=>{calls.push([url,options]);return {id:'snapshot',prospective:true}},
+  cardEls:new Map(),saveDraft(){saves++},api:async(url,options)=>{calls.push([url,options]);
+    if(url==='/fatigue-trial/settings') { if(failSettings) throw new Error('Offline'); return {enabled:JSON.parse(options.body).enabled}; }
+    return {id:'snapshot',prospective:true}},
   draft:{startedAt:'2026-10-22T15:00:00Z',exercises:[],soreness:{squat:{level:0,pain:true}}},
   sorenessPatterns:{Squat:'squat'}});
 vm.runInContext(html.slice(html.indexOf('  let trialEnabled ='),html.indexOf('  let sorenessPatterns =')),context);
@@ -37,5 +39,18 @@ assert.equal(button.textContent,'Record before first set');
   context.showTrialResults([{id:'snapshot',exercise_template_id:'squat',prediction:'uncertain',observed:'unclassified',prospective:true,
     across_sessions:{status:'insufficient evidence',message:'Still collecting a baseline.'},reasons:['Missing RPE'],evidence:{}}]);
   assert.ok(JSON.stringify($('trialResults')).includes('unclassified'));
+  vm.runInContext('trialEnabled=false; renderTrialSetting()',context);
+  assert.equal($('trialEnabled').textContent,'Enable model trial');
+  assert.equal($('trialSettingState').textContent,'Off · Optional');
+  const enabling=$('trialEnabled').events.click();
+  assert.equal($('trialEnabled').disabled,true,'prevent duplicate requests while saving');
+  await enabling;
+  assert.equal($('trialEnabled').attrs['aria-pressed'],'true');
+  assert.equal($('trialEnabled').textContent,'Turn off trial');
+  failSettings=true;
+  await $('trialEnabled').events.click();
+  assert.equal($('trialEnabled').attrs['aria-pressed'],'true','failed save retains the saved setting');
+  assert.equal($('trialEnabled').disabled,false);
+  assert.ok($('trialSettingStatus').textContent.includes('Offline'));
   console.log('Optional trial controls, hidden state, provenance payload, late entry and result rendering passed');
 })().catch(err=>{console.error(err);process.exitCode=1});

@@ -311,6 +311,18 @@
     #title { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0 0 10px; font-size: 19px; font-weight: 650; letter-spacing: -.02em; }
     #clock { font-size: 12px; }
     .workout-log .hint { line-height: 1.55; }
+    .workout-log .trial-optin { border-color: var(--accent); background: var(--accent-soft); margin-bottom: 16px; }
+    .trial-optin-row { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 24px; }
+    .trial-optin-copy { flex: 1 1 300px; min-width: 0; }
+    .trial-optin-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .trial-optin-heading h2 { font-size: 20px; margin: 0; }
+    .trial-optin-state { border: 1px solid var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 650; }
+    .trial-optin-copy p { margin: 8px 0 0; font-size: 14px; }
+    #trialEnabled { min-height: 48px; min-width: 190px; }
+    #trialSettingStatus { margin: 12px 0 0; }
+    #trialHistory { margin-top: 12px; }
+    #trialHistory summary { cursor: pointer; min-height: 44px; display: list-item; padding: 10px 0; }
+    @media (max-width: 599px) { #trialEnabled { width: 100%; } }
     .exhead { padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px; gap: 8px; }
     .exhead .ex-title { font-size: 18px; font-weight: 650; }
     .exhead .chip { background: var(--soft); border-color: var(--line); min-height: 36px; }
@@ -395,9 +407,17 @@
 
   <p id="previewNotice" class="hint" hidden>Local preview · Saving to Hevy is disabled here.</p>
   <section id="start" hidden>
-    <label class="hint"><input id="trialEnabled" type="checkbox"> Optional model trial</label>
-    <p id="trialSettingStatus" class="hint" role="status"></p>
-    <details id="trialHistory" hidden><summary>Model trial history</summary><div></div></details>
+    <section id="trialOptin" class="card trial-optin" aria-labelledby="trialOptinTitle">
+      <div class="trial-optin-row">
+        <div class="trial-optin-copy">
+          <div class="trial-optin-heading"><h2 id="trialOptinTitle">Performance model trial</h2><span id="trialSettingState" class="trial-optin-state">Optional</span></div>
+          <p id="trialOptinDescription">Use your check-in to test whether the model predicts today's performance. Record before lifting; see the result after saving.</p>
+        </div>
+        <button id="trialEnabled" class="primary" type="button" aria-pressed="false" aria-describedby="trialOptinDescription trialSettingStatus" disabled>Enable model trial</button>
+      </div>
+      <p id="trialSettingStatus" class="hint" role="status">Loading trial setting…</p>
+      <details id="trialHistory" hidden><summary>Model trial history</summary><div></div></details>
+    </section>
     <section id="plannedStart" class="card" hidden></section>
     <button id="empty" class="wide" type="button" style="margin-bottom:12px">Start an empty workout</button>
     <p class="muted" style="margin:0 0 8px">Or copy a recent workout. Its exercises and sets come across as a starting point.</p>
@@ -1111,6 +1131,14 @@
 
   // ── Workout screen ──────────────────────────────────────────────────────────
   let trialEnabled = false, trialDaily = null;
+  function renderTrialSetting() {
+    $("trialEnabled").textContent = trialEnabled ? "Turn off trial" : "Enable model trial";
+    $("trialEnabled").className = trialEnabled ? "" : "primary";
+    $("trialEnabled").setAttribute("aria-pressed", String(trialEnabled));
+    $("trialEnabled").disabled = false;
+    $("trialSettingState").textContent = trialEnabled ? "On" : "Off · Optional";
+    $("trialSettingStatus").textContent = trialEnabled ? "On · Trial controls will appear in your workouts. Results stay hidden until saving." : "Off · Enable to show trial controls in your workouts.";
+  }
   function localTrialDate() {
     const d = new Date();
     return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
@@ -1139,12 +1167,15 @@
       }
     } catch (_) {}
   }
-  $("trialEnabled").addEventListener("change", async () => {
+  $("trialEnabled").addEventListener("click", async () => {
+    if ($("trialEnabled").disabled) return;
+    $("trialEnabled").disabled = true;
+    $("trialSettingStatus").textContent = "Saving trial setting…";
     try {
-      const value = await api("/fatigue-trial/settings", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({enabled:$("trialEnabled").checked})});
-      trialEnabled = value.enabled; $("trialSettingStatus").textContent = trialEnabled ? "Trial enabled. Results stay hidden until saving." : "Trial disabled.";
+      const value = await api("/fatigue-trial/settings", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({enabled:!trialEnabled})});
+      trialEnabled = value.enabled; renderTrialSetting();
       refreshTrialDaily();
-    } catch (err) { $("trialEnabled").checked = trialEnabled; $("trialSettingStatus").textContent = err.message; }
+    } catch (err) { renderTrialSetting(); $("trialSettingStatus").textContent = "Could not save trial setting: " + err.message; }
   });
   function renderTrial(ex, box) {
     if (!trialEnabled && !ex.trialId) return;
@@ -2182,7 +2213,7 @@
 
   // ── Boot ────────────────────────────────────────────────────────────────────
   Promise.all([loadReference(), api("/soreness/patterns").then(value => { sorenessPatterns = value; }).catch(() => {}),
-    api("/fatigue-trial/settings").then(value => { trialEnabled=value.enabled; $("trialEnabled").checked=trialEnabled; $("previewNotice").hidden=!value.preview; }).catch(() => {})]).then(() => {
+    api("/fatigue-trial/settings").then(value => { trialEnabled=value.enabled; renderTrialSetting(); $("previewNotice").hidden=!value.preview; }).catch(() => { $("trialSettingStatus").textContent="Trial setting unavailable. Reload to try again."; })]).then(() => {
     refreshTrialDaily();
     draft = loadDraft();
     if (draft && Array.isArray(draft.exercises)) {
