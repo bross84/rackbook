@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     init_db()
     mesocycles.migrate_single_week_plans()
     mesocycles.clear_initial_day_placeholders()
+    mesocycles.deactivate_completed_plans()
     yield
 
 
@@ -649,6 +650,11 @@ def activate_mesocycle(plan_id: str):
 def archive_mesocycle(plan_id: str):
     _plan_call(mesocycles.archive, plan_id)
     return Response(status_code=204)
+
+
+@app.post('/api/mesocycles/{plan_id}/deactivate', response_model=mesocycles.PlanView)
+def deactivate_mesocycle(plan_id: str):
+    return _plan_call(mesocycles.deactivate, plan_id)
 
 
 @app.get("/rpe-table", response_model=RpeTable)

@@ -71,6 +71,18 @@ const logContext=vm.createContext({
 vm.runInContext(log.slice(log.indexOf('  async function loadPlannedWorkout('),log.indexOf('  async function loadPlannedQuery(')),logContext);
 vm.runInContext(log.slice(log.indexOf('  function buildEntry()'),log.indexOf('  const saveDialog =')),logContext);
 (async()=>{
+ let activationUrl='',activationFailure=false;
+ const activationContext=vm.createContext({busy:false,dirty:true,plan:{id:'p',active:false,notes:'Unsaved edits'},
+  renderLibrary(){},refreshPlans:async()=>{},message(){},
+  api:async url=>{activationUrl=url;if(activationFailure)throw Error('Failed');return {active:url.endsWith('/activate')};}});
+ vm.runInContext(builder.match(/async function setMicrocycleActive\([^\n]+/)[0],activationContext);
+ await activationContext.setMicrocycleActive({id:'p'},true);
+ assert.equal(activationUrl,'/api/mesocycles/p/activate');assert.equal(activationContext.plan.active,true);
+ assert.equal(activationContext.plan.notes,'Unsaved edits');assert.equal(activationContext.dirty,true);
+ await activationContext.setMicrocycleActive({id:'p'},false);
+ assert.equal(activationUrl,'/api/mesocycles/p/deactivate');assert.equal(activationContext.plan.active,false);
+ activationFailure=true;await activationContext.setMicrocycleActive({id:'p'},true);
+ assert.equal(activationContext.plan.active,false);assert.equal(activationContext.busy,false);
  const saveControls={editor:{hidden:false,reportValidity:()=>true},savePlan:{disabled:false},planName:{value:'Updated plan'},planNotes:{value:'Notes'}};
  let failSave=false,saveMessage='';
  const saveContext=vm.createContext({busy:false,dirty:true,plan:{id:'p',revision:1,weeks:[]},KEY:'draft',

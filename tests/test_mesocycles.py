@@ -70,6 +70,49 @@ class MesocycleCase(unittest.TestCase):
             self.assertEqual([],response.json()['completed'])
         self.hevy.create_workout.assert_not_called()
 
+    def test_deactivate_preserves_plan_and_other_active_plan(self):
+        a, b = self.create(), self.create()
+        url = '/api/mesocycles/' + a['id']
+        self.client.post(url + '/activate')
+        for _ in range(2):
+            response = self.client.post(url + '/deactivate')
+            self.assertEqual(200, response.status_code)
+            self.assertFalse(response.json()['active'])
+            self.assertEqual(a['weeks'], response.json()['weeks'])
+            self.assertEqual(a['revision'], response.json()['revision'])
+        self.client.post('/api/mesocycles/' + b['id'] + '/activate')
+        self.client.post(url + '/deactivate')
+        self.assertTrue(self.client.get('/api/mesocycles/' + b['id']).json()['active'])
+        self.hevy.create_workout.assert_not_called()
+
+    def test_final_completion_deactivates_manual_and_saved_workouts(self):
+        for manual in (True, False):
+            p = self.create()
+            url = '/api/mesocycles/' + p['id']
+            self.client.post(url + '/activate')
+            for day in ('day-a', 'day-b', 'day-c'):
+                if manual:
+                    response = self.client.post(url + '/sessions/' + day + '/complete')
+                    self.assertEqual(200, response.status_code)
+                else:
+                    mesocycles.complete(mesocycles.PlanLink(mesocycle_id=p['id'], session_id=day), 'saved-' + day, 'start')
+                current = self.client.get(url).json()
+                self.assertEqual(day != 'day-c', current['active'])
+            self.assertEqual(409, self.client.post(url + '/activate').status_code)
+            self.assertEqual(3, len(current['completed']))
+
+    def test_startup_repairs_completed_active_microcycle(self):
+        p = self.create()
+        for day in ('day-a', 'day-b', 'day-c'):
+            mesocycles.mark_completed(p['id'], day)
+        from database import get_db
+        with get_db() as conn:
+            conn.execute('UPDATE mesocycles SET active = 1 WHERE id = ?', (p['id'],))
+        mesocycles.deactivate_completed_plans()
+        current = mesocycles.get_plan(p['id'])
+        self.assertFalse(current['active'])
+        self.assertEqual(3, len(current['completed']))
+
     def test_revision_conflict_and_protection_of_completed_prescriptions(self):
         p=self.create()
         updated=deepcopy(p);updated['notes']='Changed'

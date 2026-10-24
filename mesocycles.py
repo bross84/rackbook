@@ -208,9 +208,34 @@ def activate(plan_id):
             raise PlanError('This microcycle is archived')
         if not json.loads(row['document'])['weeks'][0]['sessions']:
             raise PlanError('Add a day before using this microcycle')
+        if _all_completed(conn, row):
+            raise PlanError('This microcycle is complete. Duplicate it to plan a fresh week.')
         conn.execute('UPDATE mesocycles SET active = 0 WHERE active = 1')
         conn.execute('UPDATE mesocycles SET active = 1 WHERE id = ?', (plan_id,))
         return _view(conn, _row(conn, plan_id))
+
+
+def deactivate(plan_id):
+    with get_db() as conn:
+        _row(conn, plan_id)
+        conn.execute('UPDATE mesocycles SET active = 0 WHERE id = ?', (plan_id,))
+        return _view(conn, _row(conn, plan_id))
+
+
+def _all_completed(conn, row):
+    sessions = json.loads(row['document'])['weeks'][0]['sessions']
+    done = {r['session_id'] for r in conn.execute(
+        'SELECT session_id FROM mesocycle_completions WHERE mesocycle_id = ?', (row['id'],))}
+    return bool(sessions) and all(s['id'] in done for s in sessions)
+
+
+def deactivate_completed_plans():
+    """Repair previously completed active plans on startup."""
+    with get_db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        for row in conn.execute('SELECT * FROM mesocycles WHERE active = 1').fetchall():
+            if _all_completed(conn, row):
+                conn.execute('UPDATE mesocycles SET active = 0 WHERE id = ?', (row['id'],))
 
 
 def archive(plan_id):
@@ -231,7 +256,9 @@ def mark_completed(plan_id, session_id):
             raise PlanError('Workout day not found', 404)
         conn.execute('INSERT INTO mesocycle_completions (mesocycle_id, session_id, hevy_workout_id, workout_start) VALUES (?, ?, ?, ?) ON CONFLICT(mesocycle_id, session_id) DO NOTHING',
                      (plan_id, session_id, None, datetime.now(timezone.utc).isoformat()))
-        return _view(conn, row)
+        if _all_completed(conn, row):
+            conn.execute('UPDATE mesocycles SET active = 0 WHERE id = ?', (plan_id,))
+        return _view(conn, _row(conn, plan_id))
 
 
 def undo_manual_completion(plan_id, session_id):
@@ -285,5 +312,8 @@ def validate_save(link: PlanLink, start):
 def complete(link: PlanLink, hevy_id, start):
     plan = resolve_plan(link.mesocycle_id, link.session_id)
     with get_db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
         conn.execute('INSERT INTO mesocycle_completions (mesocycle_id, session_id, hevy_workout_id, workout_start) VALUES (?, ?, ?, ?) ON CONFLICT(mesocycle_id, session_id) DO NOTHING',
                      (plan['id'], link.session_id, hevy_id, start))
+        if _all_completed(conn, _row(conn, plan['id'])):
+            conn.execute('UPDATE mesocycles SET active = 0 WHERE id = ?', (plan['id'],))
