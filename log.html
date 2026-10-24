@@ -411,7 +411,7 @@
       <div class="trial-optin-row">
         <div class="trial-optin-copy">
           <div class="trial-optin-heading"><h2 id="trialOptinTitle">Performance model trial</h2><span id="trialSettingState" class="trial-optin-state">Optional</span></div>
-          <p id="trialOptinDescription">Use your check-in to test whether the model predicts today's performance. Record before lifting; see the result after saving.</p>
+          <p id="trialOptinDescription">Enter your pre-workout scores and planned sets. The trial records automatically before lifting; see the result after saving.</p>
         </div>
         <button id="trialEnabled" class="primary" type="button" aria-pressed="false" aria-describedby="trialOptinDescription trialSettingStatus" disabled>Enable model trial</button>
       </div>
@@ -597,6 +597,7 @@
 
   function loadDraft() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }
   function saveDraft() {
+    queueTrialRecording();
     try { localStorage.setItem(KEY, JSON.stringify(draft)); } catch (e) {}
     if (draft) draft.exercises.forEach((ex) => { refreshE1rm(ex); refreshLoader(ex); });
     if (draft) new Set(draft.exercises.map((ex) => ex.template_id)).forEach(queueStress);
@@ -1131,6 +1132,43 @@
 
   // ── Workout screen ──────────────────────────────────────────────────────────
   let trialEnabled = false, trialDaily = null;
+  let trialRecordTimer;
+  const trialRecording = new WeakSet();
+  function queueTrialRecording() {
+    clearTimeout(trialRecordTimer);
+    if (!trialEnabled || !draft) return;
+    trialRecordTimer = setTimeout(() => {
+      if (trialEnabled && draft) draft.exercises.forEach(ex => { void recordTrialAutomatically(ex); });
+    }, 1500);
+  }
+  async function recordTrialAutomatically(ex) {
+    if (!trialEnabled || !draft || !draft.exercises.includes(ex) || ex.trialId || trialRecording.has(ex)) return;
+    const workout = draft;
+    const working = ex.sets.filter(s => s.type !== "warmup");
+    if (ex.trialStarted || working.some(s => s.done)) return;
+    const target = working.find(s => s.ts) || working[0];
+    const rating = draft.soreness?.[sorenessPatterns?.[ex.title]] || ex.trialSoreness || {};
+    if (!Number.isInteger(rating.level) || rating.level < 0 || rating.level > 3 || !target ||
+        !Number.isInteger(Number(target.reps)) || Number(target.reps) < 1 ||
+        target.rpe === "" || target.rpe == null || !Number.isFinite(Number(target.rpe)) || Number(target.rpe) < 4 || Number(target.rpe) > 10 || Number(target.rpe)*2 % 1 ||
+        !(Number(target.kg) > 0)) return;
+    trialRecording.add(ex);
+    try {
+      const result = await api("/fatigue-trial/snapshots", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        session_key:workout.startedAt, workout_start:workout.startedAt, exercise_template_id:ex.template_id, exercise_order:workout.exercises.indexOf(ex),
+        local_date:localTrialDate(), soreness:rating.level, pain:rating.pain === true, working_set_started:false,
+        mode:working.some(s=>s.ts)?"strength":"hypertrophy", planned_reps:Number(target.reps), planned_rpe:Number(target.rpe), planned_weight_kg:Number(target.kg)})});
+      ex.trialId = result.id; ex.trialProspective = result.prospective; delete ex.trialRecordError;
+      if (draft === workout) saveDraft();
+    } catch (err) { ex.trialRecordError = err.message; }
+    finally {
+      trialRecording.delete(ex);
+      if (draft === workout) {
+        const card = cardEls.get(ex.id), box = card?.querySelector(".trial-panel");
+        if (box) { box.replaceChildren(); renderTrial(ex, box); }
+      }
+    }
+  }
   function renderTrialSetting() {
     $("trialEnabled").textContent = trialEnabled ? "Turn off trial" : "Enable model trial";
     $("trialEnabled").className = trialEnabled ? "" : "primary";
@@ -1174,6 +1212,7 @@
     try {
       const value = await api("/fatigue-trial/settings", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({enabled:!trialEnabled})});
       trialEnabled = value.enabled; renderTrialSetting();
+      if (draft) renderWorkout();
       refreshTrialDaily();
     } catch (err) { renderTrialSetting(); $("trialSettingStatus").textContent = "Could not save trial setting: " + err.message; }
   });
@@ -1199,26 +1238,11 @@
       details.append(el("p", "hint", ex.trialProspective ? "Recorded before your first working set." : "Late entry · excluded from prospective predictions."));
       details.append(el("p", "hint", "Later soreness edits do not replace the original trial snapshot."), trialNoteControls(ex.trialId)); box.append(details); return;
     }
-    box.append(el("strong", null, "Model trial · Optional"), el("p", "hint", "Use this check-in for today's trial."));
-    const button = el("button", "wide", ex.trialStarted ? "Record late entry" : "Record before first set"); button.type = "button";
-    const status = el("p", "hint", "Your result stays hidden until the workout is saved."); status.setAttribute("role", "status");
-    button.addEventListener("click", async () => {
-      const working = ex.sets.filter(s => s.type !== "warmup");
-      const target = working.find(s => s.ts) || working[0];
-      if (!target || !(Number(target.reps)>0)) { status.textContent = "Enter the first working set before recording."; return; }
-      const rating = draft.soreness?.[sorenessPatterns?.[ex.title]] || ex.trialSoreness || {};
-      button.disabled = true;
-      try {
-        const result = await api("/fatigue-trial/snapshots", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-          session_key:draft.startedAt, workout_start:draft.startedAt, exercise_template_id:ex.template_id, exercise_order:draft.exercises.indexOf(ex),
-          local_date:localTrialDate(), soreness:rating.level ?? null, pain:rating.pain === true,
-          working_set_started:Boolean(ex.trialStarted || working.some(s=>s.done)), mode:working.some(s=>s.ts)?"strength":"hypertrophy",
-          planned_reps:Number(target.reps), planned_rpe:target.rpe === "" ? null : Number(target.rpe), planned_weight_kg:Number(target.kg)>0?Number(target.kg):null})});
-        ex.trialId = result.id; ex.trialProspective = result.prospective; saveDraft(); box.replaceChildren(); renderTrial(ex,box);
-        const checkin = cardEls.get(ex.id)?.querySelector(".movement-soreness"); if (checkin) renderSoreness(ex, checkin);
-      } catch (err) { status.textContent = "Trial not recorded: " + err.message + " You can keep logging."; button.disabled=false; }
-    });
-    box.append(button,status);
+    const started = ex.trialStarted || ex.sets.some(s => s.type !== "warmup" && s.done);
+    const status = el("p", "hint", ex.trialRecordError ? "Automatic trial recording failed: " + ex.trialRecordError + ". Keep logging; another pre-set edit will retry." : started ? "Trial not recorded before the first set. Keep logging normally." : "Enter soreness/pain and the planned working set. Trial records automatically after a short pause; wait for Trial recorded before lifting.");
+    status.setAttribute("role", "status");
+    box.append(el("strong", null, "Model trial · Automatic"), status);
+    if (!ex.trialRecordError) queueTrialRecording();
   }
   function trialNoteControls(id) {
     const wrap = el("details"); wrap.append(el("summary", null, "Record a correction or training change"));
@@ -1758,6 +1782,10 @@
         row.classList.toggle("done", s.done);
         showRpe(rpe, s.done ? (s.arpe || s.rpe) : s.rpe);
         applyAuto(ex); saveDraft();
+        if (trialEnabled || ex.trialId) {
+          const trialBox = cardEls.get(ex.id)?.querySelector(".trial-panel");
+          if (trialBox) { trialBox.replaceChildren(); renderTrial(ex, trialBox); }
+        }
         const rest = restFor(ex);
         if (s.done && s.type !== "warmup" && rest > 0) restStart(rest);   // the rest timer, this movement's own time; warm-ups don't start it
         // A ticked warm-up is dropped from the workout (so it is not saved to Hevy either) after a moment, so a mis-tap can be undone.

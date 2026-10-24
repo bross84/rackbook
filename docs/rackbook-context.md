@@ -7,6 +7,8 @@ Last brought up to date: 2026-10-16.
 
 Optional fatigue trial (2026-10-23): disabled-by-default recording/reveal panel on `/log`, isolated `fatigue_trial_*` storage, a read-only Hevy Fatigue check-in bridge and offline backup/replay tools. Normal workout saving remains independent. Experimental v0 rules, APIs, local Docker setup and limitations: [fatigue-trial.md](fatigue-trial.md). Live homelab coverage and prospective validation require its data; available local copies were empty. This does not consolidate the apps.
 
+Automatic trial recording (2026-10-24): when enabled, the log records each unstarted movement after 1.5 seconds without edits once soreness and planned reps/RPE/weight are available. No record button is needed. Snapshots remain immutable, unknown answers stay unknown, late recordings remain excluded, and failures never block logging. Enter scores and wait for the recorded status before lifting; see the trial guide for details.
+
 ---
 
 ## What this is now
