@@ -226,6 +226,10 @@
     .page-back { flex-shrink:0; min-height:44px; padding:4px 8px; border:0; border-radius:8px; background:transparent; color:var(--accent,currentColor); font:inherit; font-size:14px; cursor:pointer; white-space:nowrap; }
     .page-back:disabled { opacity:.4; cursor:default; }
     .page-back:focus-visible { outline:2px solid var(--accent,currentColor); outline-offset:2px; }
+    .trial-panel { border:1px solid var(--accent); border-radius:12px; padding:14px; margin:12px 0; background:var(--accent-soft); }
+    .trial-panel summary { cursor:pointer; min-height:32px; }
+    .trial-panel textarea, .trial-panel select { display:block; width:100%; margin:8px 0; }
+    .trial-panel textarea { min-height:80px; }
   </style>
   <style id="rackbook-theme">
 
@@ -389,7 +393,11 @@
   </header>
   <div id="msg"></div>
 
+  <p id="previewNotice" class="hint" hidden>Local preview · Saving to Hevy is disabled here.</p>
   <section id="start" hidden>
+    <label class="hint"><input id="trialEnabled" type="checkbox"> Optional model trial</label>
+    <p id="trialSettingStatus" class="hint" role="status"></p>
+    <details id="trialHistory" hidden><summary>Model trial history</summary><div></div></details>
     <section id="plannedStart" class="card" hidden></section>
     <button id="empty" class="wide" type="button" style="margin-bottom:12px">Start an empty workout</button>
     <p class="muted" style="margin:0 0 8px">Or copy a recent workout. Its exercises and sets come across as a starting point.</p>
@@ -402,6 +410,7 @@
       <p id="clock" class="muted" style="margin:6px 0 0"></p>
       <p class="hint">Before ✓ the RPE plans the weight. Tap ✓ right after the set: the RPE you set then is the one you logged, and the weight stays.</p>
       <div id="sessionSoreness" hidden></div>
+      <div id="trialDaily" class="hint" hidden></div>
       <div id="plannedOrigin" class="hint" hidden></div>
     </div>
     <div id="exercises"></div>
@@ -413,6 +422,7 @@
 
   <section id="done" hidden>
     <div class="msg ok">Saved to Hevy.</div>
+    <div id="trialResults"></div>
     <button id="again" class="wide" type="button" style="margin-bottom:8px">Log another workout</button>
     <p style="text-align:center"><a href="/recent">See it in Recent workouts</a></p>
   </section>
@@ -1100,6 +1110,119 @@
   }
 
   // ── Workout screen ──────────────────────────────────────────────────────────
+  let trialEnabled = false, trialDaily = null;
+  function localTrialDate() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  }
+  async function refreshTrialDaily() {
+    if (!trialEnabled) { $("trialDaily").hidden = true; return; }
+    try { trialDaily = await api("/fatigue-trial/daily?day=" + localTrialDate()); }
+    catch (_) { trialDaily = {status:"unavailable"}; }
+    const box = $("trialDaily"); box.hidden = false; box.replaceChildren();
+    const details = el("details"); details.append(el("summary", null, "Daily check-in · " + (trialDaily.status === "available" ? "Today ✓" : trialDaily.status)));
+    details.append(el("p", "hint", "Original Hevy Fatigue scale: 0–4. " + (trialDaily.date || "No check-in available") + ". Date-only source; fetched " + (trialDaily.fetched_at || "now") + "."));
+    for (const [key,value] of Object.entries(trialDaily.ratings || {})) details.append(el("p", "hint", key.replaceAll("_", " ") + ": " + (value ?? "Unknown")));
+    box.append(details);
+    $("trialHistory").hidden = false;
+    try {
+      const results = await api("/fatigue-trial/comparisons");
+      const target = $("trialHistory").querySelector("div"); target.replaceChildren();
+      for (const r of results) {
+        const item = el("p", "hint", r.recorded_at.slice(0,10) + " · " + r.exercise_template_id + " · " +
+          (r.status === "completed" ? "Expected: " + r.prediction.replaceAll("_"," ") + "; observed: " + r.observed.replaceAll("_"," ") : "Trial recorded · Result hidden"));
+        target.append(item);
+      }
+      const evaluations = await api("/fatigue-trial/evaluation");
+      for (const cohort of evaluations) {
+        target.append(el("p", "hint", cohort.exercise_template_id + " · " + cohort.eligible_predictions + "/12 eligible predictions · Review " + cohort.review_at.slice(0,10) + " · " + cohort.status));
+      }
+    } catch (_) {}
+  }
+  $("trialEnabled").addEventListener("change", async () => {
+    try {
+      const value = await api("/fatigue-trial/settings", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({enabled:$("trialEnabled").checked})});
+      trialEnabled = value.enabled; $("trialSettingStatus").textContent = trialEnabled ? "Trial enabled. Results stay hidden until saving." : "Trial disabled.";
+      refreshTrialDaily();
+    } catch (err) { $("trialEnabled").checked = trialEnabled; $("trialSettingStatus").textContent = err.message; }
+  });
+  function renderTrial(ex, box) {
+    if (!trialEnabled && !ex.trialId) return;
+    box.className = "trial-panel"; box.setAttribute("aria-label", "Optional model trial for " + ex.title);
+    if (!sorenessPatterns?.[ex.title] && !ex.trialId) {
+      const controls = el("fieldset"); controls.style.cssText="border:0;padding:0;margin:0 0 12px";
+      controls.append(el("legend",null,"Soreness before this movement"));
+      const choices=el("div"); choices.style.cssText="display:flex;gap:6px;flex-wrap:wrap";
+      for (const [value,label] of [[0,"None"],[1,"Mild"],[2,"Moderate"],[3,"Severe"]]) {
+        const choice=el("button",null,label); choice.type="button"; choice.style.minHeight="44px";
+        choice.setAttribute("aria-pressed",String(ex.trialSoreness?.level===value));
+        choice.addEventListener("click",()=>{ ex.trialSoreness ||= {level:null,pain:false}; ex.trialSoreness.level=ex.trialSoreness.level===value?null:value; saveDraft(); box.replaceChildren(); renderTrial(ex,box); }); choices.append(choice);
+      }
+      const painLabel=el("label"); painLabel.style.cssText="display:flex;gap:8px;align-items:center;min-height:44px";
+      const pain=el("input"); pain.type="checkbox"; pain.checked=ex.trialSoreness?.pain===true;
+      pain.addEventListener("change",()=>{ ex.trialSoreness ||= {level:null,pain:false}; ex.trialSoreness.pain=pain.checked; saveDraft(); });
+      painLabel.append(pain,el("span",null,"Pain or injury")); controls.append(choices,painLabel); box.append(controls);
+    }
+    if (ex.trialId) {
+      const details = el("details"); details.append(el("summary", null, "Trial recorded · Result hidden"));
+      details.append(el("p", "hint", ex.trialProspective ? "Recorded before your first working set." : "Late entry · excluded from prospective predictions."));
+      details.append(el("p", "hint", "Later soreness edits do not replace the original trial snapshot."), trialNoteControls(ex.trialId)); box.append(details); return;
+    }
+    box.append(el("strong", null, "Model trial · Optional"), el("p", "hint", "Use this check-in for today's trial."));
+    const button = el("button", "wide", ex.trialStarted ? "Record late entry" : "Record before first set"); button.type = "button";
+    const status = el("p", "hint", "Your result stays hidden until the workout is saved."); status.setAttribute("role", "status");
+    button.addEventListener("click", async () => {
+      const working = ex.sets.filter(s => s.type !== "warmup");
+      const target = working.find(s => s.ts) || working[0];
+      if (!target || !(Number(target.reps)>0)) { status.textContent = "Enter the first working set before recording."; return; }
+      const rating = draft.soreness?.[sorenessPatterns?.[ex.title]] || ex.trialSoreness || {};
+      button.disabled = true;
+      try {
+        const result = await api("/fatigue-trial/snapshots", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+          session_key:draft.startedAt, workout_start:draft.startedAt, exercise_template_id:ex.template_id, exercise_order:draft.exercises.indexOf(ex),
+          local_date:localTrialDate(), soreness:rating.level ?? null, pain:rating.pain === true,
+          working_set_started:Boolean(ex.trialStarted || working.some(s=>s.done)), mode:working.some(s=>s.ts)?"strength":"hypertrophy",
+          planned_reps:Number(target.reps), planned_rpe:target.rpe === "" ? null : Number(target.rpe), planned_weight_kg:Number(target.kg)>0?Number(target.kg):null})});
+        ex.trialId = result.id; ex.trialProspective = result.prospective; saveDraft(); box.replaceChildren(); renderTrial(ex,box);
+        const checkin = cardEls.get(ex.id)?.querySelector(".movement-soreness"); if (checkin) renderSoreness(ex, checkin);
+      } catch (err) { status.textContent = "Trial not recorded: " + err.message + " You can keep logging."; button.disabled=false; }
+    });
+    box.append(button,status);
+  }
+  function trialNoteControls(id) {
+    const wrap = el("details"); wrap.append(el("summary", null, "Record a correction or training change"));
+    const kind = el("select"); kind.setAttribute("aria-label", "Trial note type");
+    for (const [value,label] of [["correction","Observation correction"],["workout_change","Workout changed"],["advice_followed","Advice followed from either app"],["suggested_change","Suggested dose change"],["actual_change","Dose change actually made"]]) {
+      const option=el("option",null,label); option.value=value; kind.append(option);
+    }
+    const text=el("textarea"); text.maxLength=2000; text.setAttribute("aria-label","Trial note");
+    const button=el("button",null,"Save note"); button.type="button";
+    const status=el("p","hint"); status.setAttribute("role","status");
+    button.addEventListener("click",async()=>{
+      if(!text.value.trim()) { status.textContent="Enter a note first."; return; }
+      button.disabled=true;
+      try { await api("/fatigue-trial/snapshots/"+encodeURIComponent(id)+"/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:kind.value,text:text.value.trim()})}); status.textContent="Note saved. The original snapshot is unchanged."; text.value=""; }
+      catch(err) { status.textContent=err.message; }
+      finally { button.disabled=false; }
+    });
+    wrap.append(kind,text,button,status); return wrap;
+  }
+  function showTrialResults(results, exercises=[]) {
+    const box = $("trialResults"); box.replaceChildren();
+    for (const result of results || []) {
+      const card = el("section", "card trial-panel");
+      const name=exercises.find(ex=>ex.exercise_template_id===result.exercise_template_id)?.title || result.exercise_template_id;
+      card.append(el("h2", null, name + " · Model trial"), el("p", null, "Expected performance: " + result.prediction.replaceAll("_"," ")),
+        el("p", null, "Observed performance: " + result.observed.replaceAll("_"," ")),
+        el("p", "hint", result.prospective ? "Recorded before training." : "Late entry · excluded from prospective evaluation."),
+        el("p", null, "Across sessions · " + result.across_sessions.status), el("p", "hint", result.across_sessions.message));
+      if (result.pain) card.append(el("p", null, "Pain/injury concern recorded separately from the prediction."));
+      const details = el("details"); details.append(el("summary", null, "View comparison details"));
+      details.append(el("p", "hint", result.reasons.join(" ")));
+      const evidence = el("pre"); evidence.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere";
+      evidence.textContent=JSON.stringify(result.evidence,null,2); details.append(evidence); card.append(details,trialNoteControls(result.id)); box.append(card);
+    }
+  }
   let sorenessPatterns = null;
   function renderSoreness(ex, box) {
     box.replaceChildren();
@@ -1151,7 +1274,11 @@
         }
       });
       painLabel.append(pain, el("span", null, "Pain or injury"));
-      group.append(row, painLabel); box.append(group);
+      group.append(row, painLabel);
+      if (ex.trialId) {
+        const edit = el("details"), rating = draft.soreness?.[key] || {};
+        edit.append(el("summary",null,"Soreness: " + (["None","Mild","Moderate","Severe"][rating.level] || "Unknown") + " · " + (rating.pain ? "Pain/injury flagged" : "No pain reported")),group); box.append(edit);
+      } else box.append(group);
     }
   }
 
@@ -1524,6 +1651,7 @@
     head.append(chip, rest, more, complete, toggle);
     const checkin = el("div", "movement-soreness");
     renderSoreness(ex, checkin); left.append(checkin);
+    const trialBox = el("section"); renderTrial(ex, trialBox); left.append(trialBox);
     left.append(renderRefBar(ex));
     const stressBox = el("section", "stress");
     stressBox.setAttribute("aria-label", "Stress for " + ex.title);
@@ -1587,6 +1715,10 @@
       tick.addEventListener("click", () => {
         if (!rpe.reportValidity()) return;
         s.done = !s.done;
+        if (s.done && s.type !== "warmup") {
+          ex.trialStarted = true;
+          if (trialEnabled) api("/fatigue-trial/started", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_key:draft.startedAt,exercise_template_id:ex.template_id})}).catch(()=>{});
+        }
         if (s.done && s.type !== "warmup" && exerciseComplete(ex)) {
           ex.collapsed = true; closeNumberPad();
         } else if (!s.done) ex.collapsed = false;
@@ -1825,6 +1957,7 @@
       clearDraft();
       show("done");
       $("done").querySelector(".msg").textContent = saved.plan_warning || "Saved to Hevy.";
+      showTrialResults(saved.trial_results, entry.exercises);
     } catch (err) {
       say(err.message + " Your workout is still here. If you're not sure it saved, check Recent workouts before trying again.");
       window.scrollTo(0, 0);
@@ -2048,7 +2181,9 @@
   });
 
   // ── Boot ────────────────────────────────────────────────────────────────────
-  Promise.all([loadReference(), api("/soreness/patterns").then(value => { sorenessPatterns = value; }).catch(() => {})]).then(() => {
+  Promise.all([loadReference(), api("/soreness/patterns").then(value => { sorenessPatterns = value; }).catch(() => {}),
+    api("/fatigue-trial/settings").then(value => { trialEnabled=value.enabled; $("trialEnabled").checked=trialEnabled; $("previewNotice").hidden=!value.preview; }).catch(() => {})]).then(() => {
+    refreshTrialDaily();
     draft = loadDraft();
     if (draft && Array.isArray(draft.exercises)) {
       for (const ex of draft.exercises) {

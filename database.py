@@ -22,6 +22,40 @@ def init_db() -> None:
             pass  # already renamed, or new DB (table doesn't exist yet)
 
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS fatigue_trial_snapshots (
+                id TEXT PRIMARY KEY,
+                session_key TEXT NOT NULL,
+                exercise_template_id TEXT NOT NULL,
+                workout_start TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                model_version TEXT NOT NULL,
+                prospective INTEGER NOT NULL,
+                pain INTEGER NOT NULL,
+                snapshot TEXT NOT NULL,
+                completion TEXT,
+                hevy_workout_id TEXT,
+                UNIQUE(session_key, exercise_template_id)
+            );
+            CREATE TABLE IF NOT EXISTS fatigue_trial_starts (
+                session_key TEXT NOT NULL,
+                exercise_template_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                PRIMARY KEY(session_key, exercise_template_id)
+            );
+            CREATE TABLE IF NOT EXISTS fatigue_trial_skips (
+                hevy_workout_id TEXT NOT NULL,
+                exercise_template_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                PRIMARY KEY(hevy_workout_id, exercise_template_id)
+            );
+            CREATE TABLE IF NOT EXISTS fatigue_trial_notes (
+                id INTEGER PRIMARY KEY,
+                trial_id TEXT NOT NULL REFERENCES fatigue_trial_snapshots(id),
+                kind TEXT NOT NULL,
+                text TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS fatigue_relationships (
                 exercise_template_id TEXT PRIMARY KEY NOT NULL,
                 patterns_json TEXT NOT NULL,

@@ -1,0 +1,16 @@
+.git
+.venv
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+hevy_config.json
+data/*
+!data/rpe_chart.csv
+!data/rpe_chart_user.csv
+__pycache__
+**/__pycache__
+.claude
+.codex
+.agents

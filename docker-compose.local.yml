@@ -1,0 +1,19 @@
+# Reuses the pre-existing Docker Desktop container/volume on port 8126.
+# The homelab continues to use docker-compose.yml.
+services:
+  531bbb:
+    build: .
+    container_name: 531bbb
+    restart: unless-stopped
+    ports:
+      - "8126:8126"
+    volumes:
+      - local-data:/data
+    environment:
+      DB_PATH: /data/531bbb.db
+      RACKBOOK_READ_ONLY_PREVIEW: "1"
+      # Configure HEVY_FATIGUE_DB_PATH and a read-only bridge mount when live data is available.
+volumes:
+  local-data:
+    external: true
+    name: 531bbb-ar_531bbb-data

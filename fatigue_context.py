@@ -20,7 +20,7 @@ def typical(points, field, minimum=3):
     return median(values) if len(values) >= minimum else None
 
 
-def build_context(points, previous, recent, latest_ts, rows, links, target_id, pattern, now):
+def build_context(points, previous, recent, latest_ts, rows, links, target_id, pattern, now, *, recent_minimum=3):
     events = []
     for row in rows:
         at = timestamp(row.get("workout_start"))
@@ -65,9 +65,9 @@ def build_context(points, previous, recent, latest_ts, rows, links, target_id, p
         reference_exercise_days=typical(previous, "days_since_exercise"),
         reference_pattern_days=typical(previous, "days_since_pattern"),
         reference_related_sets_7=typical(previous, "related_sets_7_before"),
-        recent_exercise_days=typical(recent, "days_since_exercise"),
-        recent_pattern_days=typical(recent, "days_since_pattern"),
-        recent_related_sets_7=typical(recent, "related_sets_7_before"),
+        recent_exercise_days=typical(recent, "days_since_exercise", minimum=recent_minimum),
+        recent_pattern_days=typical(recent, "days_since_pattern", minimum=recent_minimum),
+        recent_related_sets_7=typical(recent, "related_sets_7_before", minimum=recent_minimum),
         latest_exercise_days=latest["days_since_exercise"] if latest else None,
         latest_pattern_days=latest["days_since_pattern"] if latest else None,
         latest_related_sets_7=latest["related_sets_7_before"] if latest else None,

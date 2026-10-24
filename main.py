@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import httpx
 from cryptography.fernet import InvalidToken
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Response, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from database import get_db, get_rpe_percentage, init_db
 import soreness
 import fatigue
+import fatigue_trial
 import fatigue_relationships
 import body_weight
 import hevy_client
@@ -50,6 +51,77 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Rackbook", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def isolated_preview(request: Request, call_next):
+    # Preview DBs may contain an encrypted production key; never permit remote writes.
+    if os.environ.get("RACKBOOK_READ_ONLY_PREVIEW") == "1" and request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/hevy/"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Hevy writes are disabled in this isolated local preview."}, status_code=403)
+    return await call_next(request)
+
+
+@app.get("/fatigue-trial/settings", response_model=fatigue_trial.TrialStatus)
+def trial_settings():
+    return {"enabled": fatigue_trial.enabled(), "preview": os.environ.get("RACKBOOK_READ_ONLY_PREVIEW") == "1"}
+
+
+@app.post("/fatigue-trial/started", response_model=dict[str, bool])
+def trial_started(data: fatigue_trial.MovementStart):
+    return fatigue_trial.mark_started(data)
+
+
+@app.get("/fatigue-trial/comparisons", response_model=list[fatigue_trial.TrialResult], response_model_exclude_none=True)
+def trial_comparisons():
+    return fatigue_trial.history()
+
+
+@app.get("/fatigue-trial/evaluation", response_model=list[fatigue_trial.TrialEvaluation])
+def trial_evaluation():
+    return fatigue_trial.evaluation()
+
+
+@app.put("/fatigue-trial/settings", response_model=fatigue_trial.TrialStatus)
+def trial_configure(data: fatigue_trial.TrialSettings):
+    return fatigue_trial.configure(data.enabled)
+
+
+@app.get("/fatigue-trial/daily", response_model=fatigue_trial.DailyCheckin)
+def trial_daily(day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    return fatigue_trial.daily(day)
+
+
+@app.post("/fatigue-trial/snapshots", response_model=fatigue_trial.TrialResult, response_model_exclude_none=True)
+def trial_snapshot(data: fatigue_trial.SnapshotInput):
+    try:
+        return fatigue_trial.record(data)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@app.get("/fatigue-trial/snapshots/{trial_id}", response_model=fatigue_trial.TrialResult, response_model_exclude_none=True)
+def trial_read(trial_id: str):
+    try:
+        return fatigue_trial.read(trial_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.post("/fatigue-trial/snapshots/{trial_id}/complete", response_model=fatigue_trial.TrialResult, response_model_exclude_none=True)
+def trial_complete(trial_id: str, data: fatigue_trial.CompletionInput):
+    try:
+        return fatigue_trial.complete(trial_id, data.hevy_workout_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@app.post("/fatigue-trial/snapshots/{trial_id}/notes", response_model=dict[str, bool])
+def trial_note(trial_id: str, data: fatigue_trial.TrialNote):
+    try:
+        return fatigue_trial.note(trial_id, data)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
 
 # Pages change whenever the app is rebuilt, so browsers must re-check them instead of reusing a stored copy.
 NO_CACHE = {"Cache-Control": "no-cache"}
@@ -761,7 +833,14 @@ def create_hevy_workout(entry: WorkoutEntry):
     except Exception:
         logger.exception("Could not record soreness locally")
         warning = (warning + ' ' if warning else '') + 'Saved to Hevy, but soreness could not be saved locally. Do not save the workout again.'
-    return {"id": created.get("id"), **({'plan_warning': warning} if warning else {})}
+    trial_results = []
+    try:
+        fatigue_trial.record_skips(created.get("id"), entry.start_time, [ex.exercise_template_id for ex in entry.exercises])
+        trial_results = fatigue_trial.complete_workout(created.get("id"), entry.start_time)
+    except Exception:
+        logger.exception("Workout saved; optional trial completion failed")
+        warning = (warning + ' ' if warning else '') + 'Optional trial results are unavailable. Do not save the workout again.'
+    return {"id": created.get("id"), "trial_results": trial_results, **({'plan_warning': warning} if warning else {})}
 
 
 # ── Settings ───────────────────────────────────────────────────────────────────

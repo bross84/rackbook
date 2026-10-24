@@ -5,6 +5,8 @@ Read this file at the start of every task. Do not proceed if it is missing. What
 
 Last brought up to date: 2026-10-16.
 
+Optional fatigue trial (2026-10-23): disabled-by-default recording/reveal panel on `/log`, isolated `fatigue_trial_*` storage, a read-only Hevy Fatigue check-in bridge and offline backup/replay tools. Normal workout saving remains independent. Experimental v0 rules, APIs, local Docker setup and limitations: [fatigue-trial.md](fatigue-trial.md). Live homelab coverage and prospective validation require its data; available local copies were empty. This does not consolidate the apps.
+
 ---
 
 ## What this is now
