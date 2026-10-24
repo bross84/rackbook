@@ -27,6 +27,12 @@ Set server-only `HEVY_FATIGUE_DB_PATH` through a read-only Docker mount. The bri
 
 On the homelab add a Compose override mounting the actual sibling volume/directory at `/bridge:ro` and set the database path under it. Include SQLite WAL/SHM sidecars for a live WAL database, or mount a consistent SQLite backup export. The existing Tailscale endpoint and port 8126 remain the gym entry point.
 
+For an existing Docker named volume, `docker-compose.fatigue-bridge.yml` provides the read-only mount (including WAL sidecars). First verify the volume name and `/data/hevy_fatigue.db` in the running sibling container. Set `HEVY_FATIGUE_DATA_VOLUME` to that verified volume, then use both Compose files when updating Rackbook. The external-volume declaration refuses to create an empty replacement. Retain the variable and the override in the homelab's normal update configuration so a later update does not remove the bridge.
+
+```sh
+HEVY_FATIGUE_DATA_VOLUME=<verified-existing-volume> docker compose -f docker-compose.yml -f docker-compose.fatigue-bridge.yml up -d --build rackbook
+```
+
 ## Offline inventory and replay
 
 Obtain SQLite backups on the hosts actually running the apps and record deployed image/code revisions. A checkout HEAD is not proof of deployed version. Never run importers or migrations against production for analysis.

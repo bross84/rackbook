@@ -1,0 +1,12 @@
+# Use with docker-compose.yml on the homelab. The required variable must name
+# the existing Hevy Fatigue data volume, verified with docker inspect first.
+services:
+  rackbook:
+    environment:
+      HEVY_FATIGUE_DB_PATH: /hevy-fatigue-data/hevy_fatigue.db
+    volumes:
+      - hevy-fatigue-bridge:/hevy-fatigue-data:ro
+volumes:
+  hevy-fatigue-bridge:
+    external: true
+    name: ${HEVY_FATIGUE_DATA_VOLUME:?Set the existing Hevy Fatigue data volume name}
