@@ -63,6 +63,7 @@ Implement requested changes directly, including routine code, UI adjustments, an
 
 ## Commit Style
 
+- Commit completed changes by default unless the user explicitly says not to. Do not leave a finished fix uncommitted.
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `chore:`, `docs:`
 - One logical change per commit — don't bundle unrelated changes
 - Push only when tests pass (or tests don't exist yet and the change is intentional)
