@@ -139,6 +139,10 @@
     .detail-values span { display:block; color:var(--muted); font-size:11px; }
     .detail-values b { display:block; font-size:17px; font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
     .error { border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px; color:var(--danger,#b33); }
+    .progress-loading { display:flex; align-items:center; gap:12px; padding:24px; margin-bottom:16px; border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--muted); }
+    .loading-spinner { width:24px; height:24px; flex-shrink:0; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:progress-spin .8s linear infinite; }
+    @keyframes progress-spin { to { transform:rotate(360deg); } }
+    @media(prefers-reduced-motion:reduce) { .loading-spinner { animation:none; } }
     .empty { padding:36px 16px; text-align:center; color:var(--muted); }
     #foot { margin-top:14px; max-width:850px; }
     @media(max-width:800px) {
@@ -185,6 +189,7 @@
   <div class="lifts" id="lifts" role="group" aria-label="Lift">
     <button type="button" data-lift="squat">Squat</button><button type="button" data-lift="bench">Bench</button><button type="button" data-lift="deadlift">Deadlift</button><button type="button" data-lift="press">Press</button>
   </div>
+  <div id="progressLoading" class="progress-loading" role="status" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span><span>Loading progress… Fetching workout and bodyweight history.</span></div>
   <div id="empty" class="empty" hidden></div>
   <div class="progress-layout" id="progress" hidden>
     <aside class="card summary-card" aria-label="Overall progress">
@@ -510,7 +515,8 @@
   async function load() {
     const id=++loadId;
     destroyCharts(); data=null; visibleIndices=[];
-    $("progress").hidden=true; $("foot").hidden=true; $("empty").hidden=false; $("empty").textContent="Loading progress…"; $("status").replaceChildren();
+    $("progressLoading").hidden=false;
+    $("progress").hidden=true; $("foot").hidden=true; $("empty").hidden=true; $("status").replaceChildren();
     for(const button of $("lifts").querySelectorAll("button")) button.setAttribute("aria-pressed",String(button.dataset.lift===current));
     try {
       const response=await fetch("/progress/data?lift="+encodeURIComponent(current));
@@ -523,7 +529,7 @@
     } catch(error) {
       if(id!==loadId)return;
       destroyCharts(); $("progress").hidden=true; $("empty").hidden=true; $("status").replaceChildren(el("div","error",error.message||"Could not reach the server."));
-    }
+    } finally { if(id===loadId)$("progressLoading").hidden=true; }
   }
   // Boot. All data requests are unchanged; this page never posts workouts.
   initControls();

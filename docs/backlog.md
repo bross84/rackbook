@@ -63,6 +63,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Progress loading indicator (2026-10-25): a visible spinner and loading message render before scripts/data load, covering the initial bodyweight sync as well as progress requests. Lift switches show it again; success, empty results and errors clear it, and stale responses cannot hide a newer request's indicator. Respects reduced motion.
+
 - Recent workouts single column (2026-10-25): workout cards stack vertically on desktop and tablet as well as phones, retaining newest-first order and older-workout pagination.
 
 - Completed microcycles section (2026-10-25): the builder groups fully completed, nonempty plans below unfinished plans in a collapsed-by-default section with a count. Edit, Duplicate and Delete remain available inside it; refreshes preserve its open/closed state. Empty plans remain in the main library.

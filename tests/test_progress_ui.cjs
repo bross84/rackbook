@@ -67,8 +67,11 @@ const previous=instances.slice();c.render({title:'Bench',series:[series[0]]});as
 assert.equal(boxes.sessionCount.textContent,'1 session');assert.equal(controls['Zoom in'].disabled,true);assert.doesNotMatch(text(boxes.periodLabel),/NaN/);
 c.render({title:'Press',series:[]});assert.equal(boxes.progress.hidden,true);assert.match(boxes.empty.textContent,/No sets/);
 // An older request finishing JSON parsing after a new lift must be ignored.
-(async()=>{const old=c.load();let finishOld;requests.shift()({ok:true,json:()=>new Promise(resolve=>{finishOld=resolve})});await new Promise(setImmediate);
+(async()=>{const old=c.load();assert.equal(boxes.progressLoading.hidden,false,'Loading indicator is visible during requests');let finishOld;requests.shift()({ok:true,json:()=>new Promise(resolve=>{finishOld=resolve})});await new Promise(setImmediate);
   const fresh=c.load();requests.shift()({ok:true,json:async()=>({title:'Newer lift',series:[series[4]]})});await fresh;finishOld(sample);await old;
   assert.match(text(boxes.comparison),/169.8 lb → 169.8 lb/);assert.equal(boxes.sessionCount.textContent,'1 session');
+  assert.equal(boxes.progressLoading.hidden,true,'Loading indicator clears after the latest response');
+  const failed=c.load();assert.equal(boxes.progressLoading.hidden,false);requests.shift()({ok:false,status:500,json:async()=>({detail:'Server unavailable'})});await failed;
+  assert.equal(boxes.progressLoading.hidden,true,'Loading indicator clears after errors');assert.match(text(boxes.status),/Server unavailable/);
   console.log('Chart.js Progress ranges, gestures, real time spacing, gaps, provenance, hover/tap/keyboard, lifecycle and stale-load checks passed.');
 })().catch(error=>{console.error(error);process.exitCode=1});
