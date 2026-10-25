@@ -13,6 +13,7 @@ a {color:var(--accent)} h2 {font-size:19px;margin:0} h3 {font-size:16px;margin:0
 .card {background:var(--card);border:1px solid var(--line);padding:18px} .muted {color:var(--muted);font-size:13px} .row {display:flex;align-items:center;flex-wrap:wrap;gap:10px}
 .row .grow {flex:1;min-width:180px} label {display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)} label input,label textarea {width:100%;color:var(--text)}
 .library {display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-bottom:20px} .library .card {margin:0} .library .row {margin-top:12px}
+#completedPlans {margin-bottom:20px} #completedPlans>summary {min-height:44px;padding:10px 0;font-weight:600} #completedPlans .library {margin-top:12px;margin-bottom:0}
 .page-heading {display:flex;align-items:center;min-width:0}
 .editor-layout {display:grid;grid-template-columns:210px minmax(0,1fr);gap:18px;align-items:start} .sidebar {position:sticky;top:12px;max-height:75vh;overflow:auto}
 .sidebar details {border-bottom:1px solid var(--line);padding:8px 0} summary {cursor:pointer;min-height:36px} .session-tab {width:100%;text-align:left;margin:3px 0;border-color:transparent;font-size:14px}
@@ -103,6 +104,7 @@ dialog {color:var(--text);background:var(--card);border:1px solid var(--line);bo
 <div id="status" role="status"></div>
 <div class="row editor-tools"><h2 class="grow">Your plans</h2><button id="newPlan" type="button">+ New microcycle</button></div>
 <div id="library" class="library"></div>
+<details id="completedPlans" hidden><summary id="completedPlansSummary">Completed microcycles</summary><div id="completedLibrary" class="library"></div></details>
 <form id="editor" hidden>
  <section class="card editor-title"><div class="row"><label class="grow">Program<input id="programName" maxlength="90" placeholder="BS-Bridge"></label><label>Cycle<input id="cycleNumber" type="number" min="1" max="9999" step="1" required></label><label>Week<input id="weekNumber" type="number" min="1" max="9999" step="1" required></label></div><label>Microcycle name<input id="planName" required maxlength="120"></label><p class="muted">With a program entered, workout names follow ProgramCycle.Week.Day, for example BS-Bridge1.1.1. Duplicating advances the week. Missing or invalid numbers appear as ? until corrected.</p><label>Notes<textarea id="planNotes" rows="2" maxlength="4000"></textarea></label></section>
  <div class="editor-layout"><aside class="card sidebar"><h3>Days</h3><div id="weeks"></div><button id="addDay" type="button">+ Add day</button></aside><section class="card"><div id="sessionEditor"></div></section></div>
@@ -133,12 +135,13 @@ function namingNumber(value){if(value===undefined)return 1;return Number.isInteg
 function applyNaming(p){if(!(p.program_name||'').trim())return;p.name=p.program_name.trim()+namingNumber(p.cycle)+'.'+namingNumber(p.week);p.weeks[0].name='Week '+namingNumber(p.week);p.weeks[0].sessions.forEach((s,i)=>{if(!(p.completed||[]).some(c=>c.session_id===s.id))s.name=p.name+'.'+(i+1);});}
 function duplicateMicrocycle(p){if(dirty&&!confirm('Replace your unsaved plan edits?'))return;if((p.week||1)>=9999)return message('Week must be below 9999 to advance.');plan=structuredClone(p);delete plan.id;plan.week=(plan.week||1)+1;plan.name=(plan.name+' copy').slice(0,120);plan.revision=0;plan.completed=[];plan.active=false;plan.weeks[0].sessions=plan.weeks[0].sessions.map(cloneSession);applyNaming(plan);wi=si=0;remember();renderEditor();}
 function renderLibrary() {
- const box=$('library');box.replaceChildren();if(!plans.length)box.append(el('p','muted','No plans yet. Create one, add your movements, and save it here.'));
+ const box=$('library'),finished=$('completedLibrary');box.replaceChildren();finished.replaceChildren();let finishedCount=0;if(!plans.length)box.append(el('p','muted','No plans yet. Create one, add your movements, and save it here.'));
  for(const p of plans){const card=el('section','card'),next=nextSession(p);card.append(el('h3',null,p.name),el('p','muted',(p.active?'Active · ':'Inactive · ')+p.weeks[0].sessions.length+' workouts · '+p.completed.length+' workouts completed'));
   if(next)card.append(el('p','muted','Next: '+next.s.name));else card.append(el('p','muted',p.weeks[0].sessions.length?'Microcycle complete':'No days yet'));
   const actions=el('div','row');actions.append(button('Edit plan',()=>openPlan(p)),button('Duplicate microcycle',()=>duplicateMicrocycle(p)),button('Delete',()=>deleteMicrocycle(p),'danger'));
   const toggle=button(p.active?'Deactivate':'Activate',()=>setMicrocycleActive(p,!p.active));toggle.disabled=busy||(!p.active&&!next);actions.prepend(toggle);
-  if(next&&next.s.exercises.length){const a=el('a',null,'Start next workout');a.href=startUrl(p,next.s);actions.append(a);}card.append(actions);box.append(card);}
+  if(next&&next.s.exercises.length){const a=el('a',null,'Start next workout');a.href=startUrl(p,next.s);actions.append(a);}card.append(actions);if(!next&&p.weeks[0].sessions.length){finished.append(card);finishedCount++;}else box.append(card);}
+ $('completedPlans').hidden=finishedCount===0;$('completedPlansSummary').textContent='Completed microcycles ('+finishedCount+')';
 }
 async function refreshPlans(){plans=await api('/api/mesocycles');renderLibrary();}
 async function setMicrocycleActive(p,active){if(busy)return;busy=true;renderLibrary();try{const updated=await api('/api/mesocycles/'+encodeURIComponent(p.id)+(active?'/activate':'/deactivate'),{method:'POST'});if(plan&&plan.id===p.id)plan.active=updated.active;await refreshPlans();message(active?'Microcycle activated. Its next workout is ready on the Log page.':'Microcycle deactivated. Your plan and completed workouts are preserved.');}catch(e){message(e.message);}finally{busy=false;renderLibrary();}}

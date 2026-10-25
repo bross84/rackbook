@@ -63,6 +63,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Completed microcycles section (2026-10-25): the builder groups fully completed, nonempty plans below unfinished plans in a collapsed-by-default section with a count. Edit, Duplicate and Delete remain available inside it; refreshes preserve its open/closed state. Empty plans remain in the main library.
+
 - Trial controls moved to Settings (2026-10-25): on/off controls, compact history and dashboard access now live under Performance model trial in Settings. Removes the trial card from the Log start screen and the Model trial destination from shared navigation; automatic recording and saved preferences are unchanged.
 
 - Model trial dashboard (2026-10-24): `/trial` shows movement names, per-model/mode collection progress, expected vs actual categories and pre-workout observations over time, plus expandable saved-set/check-in details. Unsaved snapshots from open/discarded drafts stay separate and hidden; they do not count toward comparisons, coverage or the review clock. Old unrecorded discard actions cannot be distinguished from open drafts. Charts reuse Progress/Stress date, zoom and inspection controls. Newly completed trials freeze actual representative set measurements. Full dashboard history avoids the compact history's former 100-record limit.
