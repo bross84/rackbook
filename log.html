@@ -739,32 +739,36 @@
   // Weights are kept in kg (s.kg, what Hevy stores) and shown in the unit you lift in, the other as a reference.
   const lbOfKg = (kg) => kg * LB_PER_KG;
   const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return n > 0 ? n : NaN; };
-  const stepOf = (ref) => (unit === "lb" ? ref.stepLb : ref.stepKg);
+  const unitFor = (ref) => ref?.weightUnit === "kg" || ref?.weightUnit === "lb" ? ref.weightUnit : unit;
+  const stepOf = (ref) => (unitFor(ref) === "lb" ? ref.stepLb : ref.stepKg);
   // A planned weight, in kg: the e1RM-derived pounds rounded to the movement's step in the unit you lift in.
   function plannedKg(rawLb, ref) {
+    const unit = unitFor(ref);
     if (unit === "lb") return Math.round(rawLb / ref.stepLb) * ref.stepLb / LB_PER_KG;
     return Math.round(rawLb / LB_PER_KG / ref.stepKg) * ref.stepKg;
   }
-  const primaryText = (s) => {
+  const primaryText = (s, ex) => {
+    const unit = unitFor(ex?.ref);
     const kg = num(s.kg);
     if (isNaN(kg)) return "";
     return unit === "lb" ? trim(Math.round(lbOfKg(kg) * 10) / 10) : trim(Math.round(kg * 100) / 100);
   };
-  const refText = (s) => {
+  const refText = (s, ex) => {
+    const unit = unitFor(ex?.ref);
     const kg = num(s.kg);
     if (isNaN(kg)) return "";
     return unit === "lb" ? trim(Math.round(kg * 10) / 10) : trim(Math.round(lbOfKg(kg)));
   };
-  function showWeight(s) {
+  function showWeight(s, ex) {
     const input = primaryInputs.get(s), cell = refCells.get(s);
-    if (input && document.activeElement !== input) input.value = primaryText(s);
-    if (cell) cell.textContent = refText(s);
+    if (input && document.activeElement !== input) input.value = primaryText(s, ex);
+    if (cell) cell.textContent = refText(s, ex);
   }
-  function defaultRef() { return { basis: "e1rm", ls: true, tmPct: 0.95, stepKg: 2.5, stepLb: 5, barKg: 20, chainKg: 0, restSec: null, state: null, ts: null }; }
+  function defaultRef() { return { basis: "e1rm", ls: true, tmPct: 0.95, stepKg: 2.5, stepLb: 5, barKg: 20, chainKg: 0, restSec: null, weightUnit: null, state: null, ts: null }; }
   function refFromServer(id) {
     const r = refs[id];
     if (!r) return defaultRef();
-    return { basis: r.basis, ls: r.ls, tmPct: r.tm_pct, stepKg: r.step_kg || 2.5, stepLb: r.step_lb || 5, barKg: r.bar_kg ?? 20, chainKg: r.chain_kg ?? 0, restSec: r.rest_sec ?? null, state: null, ts: null };
+    return { basis: r.basis, ls: r.ls, tmPct: r.tm_pct, stepKg: r.step_kg || 2.5, stepLb: r.step_lb || 5, barKg: r.bar_kg ?? 20, chainKg: r.chain_kg ?? 0, restSec: r.rest_sec ?? null, weightUnit: r.weight_unit ?? null, state: null, ts: null };
   }
 
   // One set's e1RM in lb: its weight / the table percentage for its reps and RPE (the logged RPE once ticked,
@@ -887,7 +891,7 @@
       const w = autoWeight(ex, i);
       if (w == null) return;
       s.kg = String(Math.round(w * 1e6) / 1e6);
-      showWeight(s);
+      showWeight(s, ex);
     });
   }
 
@@ -922,7 +926,7 @@
     const id = ex.template_id;
     clearTimeout(refTimers[id]);
     refTimers[id] = setTimeout(async () => {
-      const body = { basis: ex.ref.basis, ls: ex.ref.ls, tm_pct: ex.ref.tmPct, step_kg: ex.ref.stepKg, step_lb: ex.ref.stepLb, bar_kg: ex.ref.barKg, chain_kg: ex.ref.chainKg, rest_sec: ex.ref.restSec };
+      const body = { basis: ex.ref.basis, ls: ex.ref.ls, tm_pct: ex.ref.tmPct, step_kg: ex.ref.stepKg, step_lb: ex.ref.stepLb, bar_kg: ex.ref.barKg, chain_kg: ex.ref.chainKg, rest_sec: ex.ref.restSec, weight_unit: ex.ref.weightUnit ?? null };
       try {
         refs[id] = await api("/exercise-refs/" + encodeURIComponent(id), {
           method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -1375,8 +1379,9 @@
   const BAR_LB = 45;
   const BARS = [[20, "20 kg Barbell"], [30, "30 kg SSB"], [20, "20 kg Buffalo Bar"], [15, "15 kg Neutral Grip Bar"], [10, "10 kg Arch Nem. Bar"]];
   const PLATE_CLASSES = ["p25", "p20", "p15", "p10", "p5", "p2", "p1"];
-  const plateClass = (p) => PLATE_CLASSES[(unit === "lb" ? PLATES_LB : PLATES_KG).indexOf(p)] || "p1";   // colours by size, biggest first
+  const plateClass = (p, weightUnit = unit) => PLATE_CLASSES[(weightUnit === "lb" ? PLATES_LB : PLATES_KG).indexOf(p)] || "p1";   // colours by size, biggest first
   function platePlan(kg, ex) {
+    const unit = unitFor(ex.ref);
     const inLb = unit === "lb";
     const total = inLb ? lbOfKg(kg) : kg;
     const bar = inLb ? BAR_LB : ex.ref.barKg;
@@ -1403,10 +1408,11 @@
   }
   const platesText = (plan) => plan.counts.map(([p, n]) => n + "×" + trim(p)).join(" ") || (plan.below ? "under the bar" : "bar only");
   function fillLoader(ex, box) {
+    const unit = unitFor(ex.ref);
     box.replaceChildren();
     const i = loaderSet(ex), set = i >= 0 ? ex.sets[i] : null, kg = set ? num(set.kg) : NaN;
     const head = el("div", "loadhead");
-    const which = el("button", "loadwhich", set ? setName(ex, i) + " · " + primaryText(set) + " " + unit + " ▾" : "Plates ▾");
+    const which = el("button", "loadwhich", set ? setName(ex, i) + " · " + primaryText(set, ex) + " " + unit + " ▾" : "Plates ▾");
     which.type = "button"; which.addEventListener("click", () => pickLoadSet(ex));
     head.append(which);
     if (unit === "kg") {
@@ -1420,8 +1426,8 @@
     const list = [];
     plan.counts.forEach(([p, n]) => { for (let k = 0; k < n; k++) list.push(p); });
     const left = el("span", "side"), right = el("span", "side");
-    list.forEach((p) => right.append(el("i", "pl " + plateClass(p))));             // largest nearest the middle
-    [...list].reverse().forEach((p) => left.append(el("i", "pl " + plateClass(p))));
+    list.forEach((p) => right.append(el("i", "pl " + plateClass(p, unit))));             // largest nearest the middle
+    [...list].reverse().forEach((p) => left.append(el("i", "pl " + plateClass(p, unit))));
     const barEl = el("div", "barfull");
     barEl.append(left, el("span", "shaft"), right);
     box.append(barEl);
@@ -1432,7 +1438,7 @@
       if (k) read.append("  ·  ");
       read.append(el("b", null, n + "×"), " " + trim(p) + " " + unit);
     });
-    if (plan.short) read.append(el("div", "short", "(" + trim(Math.round(plan.short * 100) / 100) + " " + unit + " short of " + primaryText(set) + " " + unit + ")"));
+    if (plan.short) read.append(el("div", "short", "(" + trim(Math.round(plan.short * 100) / 100) + " " + unit + " short of " + primaryText(set, ex) + " " + unit + ")"));
     box.append(read);
   }
   function renderLoader(ex) { const box = el("div", "loader"); fillLoader(ex, box); return box; }
@@ -1441,11 +1447,12 @@
     if (box) fillLoader(ex, box);
   }
   function pickLoadSet(ex) {
+    const unit = unitFor(ex.ref);
     const items = [{ v: "auto", label: "Next set", desc: "Follows the next set you haven't ticked", on: ex.loadPin == null }];
     ex.sets.forEach((x, i) => {
       const kg = num(x.kg);
       if (isNaN(kg)) return;
-      items.push({ v: String(i), label: setName(ex, i) + " · " + primaryText(x) + " " + unit, desc: platesText(platePlan(kg, ex)) + " per side", on: ex.loadPin === i });
+      items.push({ v: String(i), label: setName(ex, i) + " · " + primaryText(x, ex) + " " + unit, desc: platesText(platePlan(kg, ex)) + " per side", on: ex.loadPin === i });
     });
     openSheet("Show the plates for", "", items, 1, (v) => { ex.loadPin = v === "auto" ? null : Number(v); saveDraft(); refreshLoader(ex); });
   }
@@ -1580,6 +1587,7 @@
     return WARMUP_LADDER;
   }
   function addWarmups(ex) {
+    const unit = unitFor(ex.ref);
     const first = ex.sets.find((s) => s.type !== "warmup" && !isNaN(num(s.kg)));
     if (!first) { say("Give the first working set a weight (or an RPE) first, so the warm-ups have something to build on."); return; }
     const top = num(first.kg), step = unit === "lb" ? ex.ref.stepLb / LB_PER_KG : ex.ref.stepKg;
@@ -1599,12 +1607,32 @@
     saveDraft(); renderWorkout();
   }
 
+  function setExerciseUnit(ex, preference) {
+    if (![null, 'kg', 'lb'].includes(preference)) return;
+    closeNumberPad();
+    for (const movement of draft.exercises.filter(e=>e.template_id===ex.template_id)) {
+      movement.ref.weightUnit=preference;
+      applyAuto(movement);
+    }
+    saveDraft(); saveRef(ex); renderWorkout();
+  }
+  function exerciseUnitControl(ex) {
+    const current=ex.ref.weightUnit ?? null;
+    const button=el('button','chip',unitFor(ex.ref)+' '+(current===null?'(page)':'')+' ▾');
+    button.type='button';button.setAttribute('aria-label','Weight unit for '+ex.title);
+    button.addEventListener('click',()=>openSheet('Weight unit · '+ex.title,
+      'Remembered for this exercise in future workouts. Entered and completed weights keep their value; automatic planned weights use the selected rounding step.',
+      [{v:'page',label:'Follow page ('+unit+')',on:current===null},{v:'kg',label:'Kilograms (kg)',on:current==='kg'},{v:'lb',label:'Pounds (lb)',on:current==='lb'}],3,
+      value=>setExerciseUnit(ex,value==='page'?null:value)));
+    return button;
+  }
   function exerciseComplete(ex) {
     const work = ex.sets.filter(s => s.type !== "warmup");
     return work.length > 0 && work.every(s => s.done);
   }
 
   function renderExercise(ex) {
+    const unit = unitFor(ex.ref);
     const card = el("section", "card");
     const head = el("div", "exhead"), left = el("div", "exleft"), right = el("div", "exright");   // side by side on a wide screen, stacked otherwise
     card.append(head, left, right);
@@ -1654,7 +1682,7 @@
       complete.textContent = exerciseComplete(ex) ? "Completed ✓" : "";
     };
     toggle.addEventListener("click", () => { ex.collapsed = !ex.collapsed; closeNumberPad(); updateCollapse(); saveDraft(); });
-    head.append(chip, rest, more, complete, toggle);
+    head.append(exerciseUnitControl(ex), chip, rest, more, complete, toggle);
     const checkin = el("div", "movement-soreness");
     renderSoreness(ex, checkin); left.append(checkin);
     const trialBox = el("section"); renderTrial(ex, trialBox); left.append(trialBox);
@@ -1689,16 +1717,16 @@
       const wt = el("input"); wt.type = "text"; wt.inputMode = "decimal"; wt.setAttribute("aria-label", "Weight in " + (unit === "lb" ? "pounds" : "kilograms"));
       prepareKeypadInput(wt, true, ex.title + " · Set " + (idx + 1));
       const refCell = el("span", "refcol");
-      primaryInputs.set(s, wt); refCells.set(s, refCell); wt.value = primaryText(s); refCell.textContent = refText(s);
+      primaryInputs.set(s, wt); refCells.set(s, refCell); wt.value = primaryText(s, ex); refCell.textContent = refText(s, ex);
       wt.addEventListener("input", () => {
         const v = num(wt.value);
         s.kg = isNaN(v) ? "" : String(unit === "lb" ? v / LB_PER_KG : v);
-        s.manual = s.kg !== ""; showWeight(s);
+        s.manual = s.kg !== ""; showWeight(s, ex);
         if (s.done) applyAuto(ex);                // a logged set changed: re-plan the sets after it
         else if (!s.manual) applyAuto(ex, s);     // clearing the box hands the weight back to auto
         saveDraft();
       });
-      wt.addEventListener("blur", () => showWeight(s));
+      wt.addEventListener("blur", () => showWeight(s, ex));
       const reps = el("input"); reps.type = "text"; reps.inputMode = "numeric"; reps.value = s.reps; reps.setAttribute("aria-label", "Reps");
       prepareKeypadInput(reps, false, ex.title + " · Set " + (idx + 1));
       reps.addEventListener("input", () => { s.reps = reps.value; applyAuto(ex, s.done ? null : s); saveDraft(); });
@@ -1923,7 +1951,7 @@
         if (s.ts && !(kg > 0 && reps > 0 && logged)) throw new Error(where + ": the TS set needs a weight, reps and an RPE.");
         sets.push({ type: s.type, weight_kg: kg, reps, rpe: !logged ? null : Number(logged), ...(s.ts ? { ts: true } : {}) });
       }
-      if (sets.length) exercises.push({ exercise_template_id: ex.template_id, title: ex.title, notes: ex.notes, sets });
+      if (sets.length) exercises.push({ exercise_template_id: ex.template_id, title: ex.title, notes: ex.notes, ...(ex.ref?.weightUnit ? {weight_unit:ex.ref.weightUnit} : {}), sets });
     }
     if (!exercises.length) throw new Error("Tap ✓ on each set you did before saving.");
     // Keep check-ins only for movements in the saved workout; one for a removed card would record a movement not trained.
@@ -2204,7 +2232,7 @@
     if (draft && Array.isArray(draft.exercises)) {
       for (const ex of draft.exercises) {
         const old = ex.ref || {};
-        ex.ref = { basis: old.basis || "e1rm", ls: old.ls === undefined ? true : old.ls, tmPct: old.tmPct || 0.95, stepKg: old.stepKg || 2.5, stepLb: old.stepLb || 5, barKg: old.barKg ?? 20, chainKg: old.chainKg ?? 0, restSec: old.restSec ?? null, state: old.state || null, ts: old.ts || null };
+        ex.ref = { basis: old.basis || "e1rm", ls: old.ls === undefined ? true : old.ls, tmPct: old.tmPct || 0.95, stepKg: old.stepKg || 2.5, stepLb: old.stepLb || 5, barKg: old.barKg ?? 20, chainKg: old.chainKg ?? 0, restSec: old.restSec ?? null, weightUnit: old.weightUnit === undefined ? (refs[ex.template_id]?.weight_unit ?? null) : old.weightUnit, state: old.state || null, ts: old.ts || null };
         for (const s of ex.sets) {
           if (s.manual === undefined) s.manual = false;
           if (s.kg === undefined) { const l = parseFloat(s.lb); s.kg = l > 0 ? String(Math.round(l / LB_PER_KG * 2) / 2) : ""; delete s.lb; }

@@ -234,6 +234,19 @@ class TestCreateHevyWorkout(WorkoutsRouteCase):
         (body,), _ = self.hevy.create_workout.call_args
         self.assertNotIn("notes", body["workout"]["exercises"][0])
 
+    def test_mixed_unit_exercises_preserve_exact_local_weights(self):
+        factor = 2.20462262185
+        response = self._post(weight_unit='lb', exercises=[
+            {'exercise_template_id': 'curl', 'weight_unit': 'lb', 'sets': [{'weight_kg': 22.5/factor, 'reps': 10}]},
+            {'exercise_template_id': 'squat', 'weight_unit': 'kg', 'sets': [{'weight_kg': 62.5, 'reps': 5}]}])
+        self.assertEqual(200, response.status_code, response.text)
+        sent = self.hevy.create_workout.call_args.args[0]['workout']['exercises']
+        self.assertAlmostEqual(sent[0]['sets'][0]['weight_kg']*factor, 23)
+        self.assertEqual(sent[1]['sets'][0]['weight_kg'], 62.5)
+        with main.get_db() as conn:
+            stored = {r['exercise_template_id']: r['weight_kg'] for r in conn.execute('SELECT exercise_template_id,weight_kg FROM logged_sets')}
+        self.assertEqual(stored, dict(curl=22.5/factor, squat=62.5))
+
     def test_rpe_outside_0_to_10_is_422(self):
         entry = {**ENTRY, "exercises": [{"exercise_template_id": "t", "sets": [{"reps": 5, "rpe": 11}]}]}
         self.assertEqual(422, self.client.post("/hevy/workouts", json=entry).status_code)

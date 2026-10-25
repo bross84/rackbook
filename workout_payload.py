@@ -5,8 +5,9 @@ No DB access, no HTTP calls, no side effects.
 Hevy's rules (docs/hevy-api.md): snake_case keys wrapped in {"workout": {...}}; set type is one of
 warmup / normal / failure / dropset; rpe is one of 6, 7, 7.5, 8, 8.5, 9, 9.5, 10 or null.
 An RPE Hevy cannot store (below 6, or 6.5) is simply left blank.
-Weights arrive in kg. When weight_unit is supplied, round to whole units in that
-display unit before posting kg to Hevy. Local records retain the entered weights.
+Weights arrive in kg. Each exercise can override the workout's weight_unit.
+Pound-mode uploads round to whole pounds; kg-mode uploads stay exact.
+Local records retain the entered weights in both cases.
 """
 from __future__ import annotations
 
@@ -45,6 +46,9 @@ def build_hevy_workout(entry: dict[str, Any]) -> dict[str, Any]:
 
     exercises = []
     for raw_exercise in entry.get("exercises") or []:
+        exercise_unit = raw_exercise.get('weight_unit') or weight_unit
+        if exercise_unit not in (None, 'kg', 'lb'):
+            raise ValueError('Exercise weight unit must be kg or lb.')
         template_id = (raw_exercise.get("exercise_template_id") or "").strip()
         name = raw_exercise.get("title") or template_id or "exercise"
         if not template_id:
@@ -59,7 +63,7 @@ def build_hevy_workout(entry: dict[str, Any]) -> dict[str, Any]:
             weight_kg = raw_set.get("weight_kg")
             if weight_kg is not None and weight_kg < 0:
                 raise ValueError(f"{name} set {number}: weight can't be negative.")
-            if weight_kg is not None and weight_unit == 'lb':
+            if weight_kg is not None and exercise_unit == 'lb':
                 # Round to whole pounds; a kg -> lb round trip can land one float below an exact .5.
                 amount = nextafter(float(weight_kg) * LB_PER_KG, inf)
                 weight_kg = floor(amount + 0.5) / LB_PER_KG

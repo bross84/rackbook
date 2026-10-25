@@ -63,6 +63,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Per-exercise kg/lb preference (2026-10-25): movement headers expose Follow page, kg and lb, remembered by movement across workouts. Inputs, rounding, warm-ups and plate loading respect the override; manual/completed loads retain their exact kg values. Mixed-unit Hevy saves round only lb movements under the existing whole-pound rule. Includes migration, persistence, mixed-upload and frontend conversion checks.
+
 - Progress loading indicator (2026-10-25): a visible spinner and loading message render before scripts/data load, covering the initial bodyweight sync as well as progress requests. Lift switches show it again; success, empty results and errors clear it, and stale responses cannot hide a newer request's indicator. Respects reduced motion.
 
 - Recent workouts single column (2026-10-25): workout cards stack vertically on desktop and tablet as well as phones, retaining newest-first order and older-workout pagination.

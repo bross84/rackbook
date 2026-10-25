@@ -46,13 +46,13 @@ class TestMovementSettings(RefsCase):
     def test_defaults_are_e1rm_last_set_on_and_95_percent(self):
         r = self.client.put("/exercise-refs/tpl-bench", json={})
         self.assertEqual(
-            {"exercise_template_id": "tpl-bench", "basis": "e1rm", "ls": True, "tm_pct": 0.95, "step_kg": 2.5, "step_lb": 5.0, "bar_kg": 20.0, "chain_kg": 0.0, "rest_sec": None}, r.json()
+            {"exercise_template_id": "tpl-bench", "basis": "e1rm", "ls": True, "tm_pct": 0.95, "step_kg": 2.5, "step_lb": 5.0, "bar_kg": 20.0, "chain_kg": 0.0, "rest_sec": None, "weight_unit": None}, r.json()
         )
 
     def test_save_and_list(self):
         r = self.client.put("/exercise-refs/tpl-squat", json={"basis": "tm", "ls": False, "tm_pct": 0.9})
         self.assertEqual(200, r.status_code, r.text)
-        expected = {"exercise_template_id": "tpl-squat", "basis": "tm", "ls": False, "tm_pct": 0.9, "step_kg": 2.5, "step_lb": 5.0, "bar_kg": 20.0, "chain_kg": 0.0, "rest_sec": None}
+        expected = {"exercise_template_id": "tpl-squat", "basis": "tm", "ls": False, "tm_pct": 0.9, "step_kg": 2.5, "step_lb": 5.0, "bar_kg": 20.0, "chain_kg": 0.0, "rest_sec": None, "weight_unit": None}
         self.assertEqual(expected, r.json())
         self.assertEqual([expected], self.client.get("/exercise-refs").json())
 
@@ -70,6 +70,25 @@ class TestMovementSettings(RefsCase):
             {"a": "tm", "b": "e1rm"},
             {r["exercise_template_id"]: r["basis"] for r in self.client.get("/exercise-refs").json()},
         )
+
+    def test_per_movement_units_persist_and_can_follow_page_again(self):
+        for exercise, unit in [('curl', 'lb'), ('squat', 'kg'), ('bench', None)]:
+            response = self.client.put('/exercise-refs/' + exercise, json={'weight_unit': unit})
+            self.assertEqual(200, response.status_code, response.text)
+        units = {r['exercise_template_id']: r['weight_unit'] for r in self.client.get('/exercise-refs').json()}
+        self.assertEqual(units, dict(curl='lb', squat='kg', bench=None))
+        self.assertIsNone(self.client.put('/exercise-refs/curl', json={'weight_unit': None}).json()['weight_unit'])
+        self.assertEqual(422, self.client.put('/exercise-refs/curl', json={'weight_unit': 'stone'}).status_code)
+
+    def test_unit_migration_keeps_existing_preferences_and_follows_page(self):
+        self.client.put('/exercise-refs/curl', json={'step_kg': 0.5, 'step_lb': 2.5, 'rest_sec': 90})
+        with database.get_db() as conn:
+            conn.execute('ALTER TABLE exercise_refs DROP COLUMN weight_unit')
+        database.init_db()
+        database.init_db()
+        row = self.client.get('/exercise-refs').json()[0]
+        self.assertIsNone(row['weight_unit'])
+        self.assertEqual((row['step_kg'], row['step_lb'], row['rest_sec']), (0.5, 2.5, 90))
 
     def test_rejects_unknown_basis_and_silly_tm_percentages(self):
         for bad in ({"basis": "percent"}, {"tm_pct": 0.2}, {"tm_pct": 1.5}):
@@ -130,7 +149,7 @@ class TestMovementSettings(RefsCase):
         conn.close()
         database.init_db()
         self.assertEqual(
-            [{"exercise_template_id": "old", "basis": "tm", "ls": True, "tm_pct": 0.95, "step_kg": 2.5, "step_lb": 5.0, "bar_kg": 20.0, "chain_kg": 0.0, "rest_sec": None}],
+            [{"exercise_template_id": "old", "basis": "tm", "ls": True, "tm_pct": 0.95, "step_kg": 2.5, "step_lb": 5.0, "bar_kg": 20.0, "chain_kg": 0.0, "rest_sec": None, "weight_unit": None}],
             self.client.get("/exercise-refs").json(),
         )
 

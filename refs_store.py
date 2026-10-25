@@ -7,6 +7,7 @@ Keyed by the Hevy exercise template id so the same choices follow the movement i
   tm_pct  the TM as a fraction of the e1RM (default 0.95)
   step_kg the plate step planned weights are rounded to (default 2.5 kg; a light lift like a pull-up wants 0.5)
   rest_sec the rest timer for this movement, in seconds (0 = off); None means use the page's default rest
+  weight_unit 'kg' or 'lb'; None follows the page's default unit
 The e1RM and TM themselves are not stored: they are worked out from the movement's last session in Hevy.
 (The table also holds older e1rm_lb / tm_lb / auto columns from an earlier version; they are unused.)
 """
@@ -22,7 +23,7 @@ DEFAULT_STEP_LB = 5.0
 DEFAULT_BAR_KG = 20.0
 DEFAULT_CHAIN_KG = 0.0
 
-_COLUMNS = "exercise_template_id, basis, ls, tm_pct, step_kg, step_lb, bar_kg, chain_kg, rest_sec"
+_COLUMNS = "exercise_template_id, basis, ls, tm_pct, step_kg, step_lb, bar_kg, chain_kg, rest_sec, weight_unit"
 
 
 def _row_to_ref(row) -> dict[str, Any]:
@@ -36,6 +37,7 @@ def _row_to_ref(row) -> dict[str, Any]:
         "bar_kg": row["bar_kg"],
         "chain_kg": row["chain_kg"],
         "rest_sec": row["rest_sec"],
+        "weight_unit": row["weight_unit"],
     }
 
 
@@ -49,12 +51,13 @@ def save_ref(
     exercise_template_id: str, basis: str, ls: bool, tm_pct: float,
     step_kg: float = DEFAULT_STEP_KG, step_lb: float = DEFAULT_STEP_LB,
     bar_kg: float = DEFAULT_BAR_KG, chain_kg: float = DEFAULT_CHAIN_KG, rest_sec: int | None = None,
+    weight_unit: str | None = None,
 ) -> dict[str, Any]:
     with get_db() as conn:
         conn.execute(
             """
-            INSERT INTO exercise_refs (exercise_template_id, basis, ls, tm_pct, step_kg, step_lb, bar_kg, chain_kg, rest_sec)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO exercise_refs (exercise_template_id, basis, ls, tm_pct, step_kg, step_lb, bar_kg, chain_kg, rest_sec, weight_unit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(exercise_template_id) DO UPDATE SET
                 basis = excluded.basis,
                 ls = excluded.ls,
@@ -64,9 +67,10 @@ def save_ref(
                 bar_kg = excluded.bar_kg,
                 chain_kg = excluded.chain_kg,
                 rest_sec = excluded.rest_sec,
+                weight_unit = excluded.weight_unit,
                 updated_at = CURRENT_TIMESTAMP
             """,
-            (exercise_template_id, basis, 1 if ls else 0, tm_pct, step_kg, step_lb, bar_kg, chain_kg, rest_sec),
+            (exercise_template_id, basis, 1 if ls else 0, tm_pct, step_kg, step_lb, bar_kg, chain_kg, rest_sec, weight_unit),
         )
         row = conn.execute(
             f"SELECT {_COLUMNS} FROM exercise_refs WHERE exercise_template_id = ?", (exercise_template_id,)

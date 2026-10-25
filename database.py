@@ -290,6 +290,7 @@ def init_db() -> None:
             "ALTER TABLE exercise_refs ADD COLUMN bar_kg REAL NOT NULL DEFAULT 20",
             "ALTER TABLE exercise_refs ADD COLUMN chain_kg REAL NOT NULL DEFAULT 0",
             "ALTER TABLE exercise_refs ADD COLUMN rest_sec INTEGER",
+            "ALTER TABLE exercise_refs ADD COLUMN weight_unit TEXT CHECK(weight_unit IN ('kg', 'lb'))",
         ):
             try:
                 conn.execute(ddl)

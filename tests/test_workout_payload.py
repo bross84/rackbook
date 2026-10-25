@@ -63,6 +63,27 @@ class TestWeight(unittest.TestCase):
         entry=_entry(weight_unit='lb',exercises=[{'exercise_template_id':'t','sets':[{'weight_kg':None,'reps':8}]}])
         self.assertIsNone(build_hevy_workout(entry)['workout']['exercises'][0]['sets'][0]['weight_kg'])
 
+    def test_mixed_exercise_units_override_workout_rounding_without_mutating_inputs(self):
+        factor = 2.20462262185
+        for global_unit in ('kg', 'lb'):
+            entry = _entry(weight_unit=global_unit, exercises=[
+                {'exercise_template_id': 'curl', 'weight_unit': 'lb', 'sets': [{'weight_kg': 22.5/factor, 'reps': 10}]},
+                {'exercise_template_id': 'squat', 'weight_unit': 'kg', 'sets': [{'weight_kg': 62.5, 'reps': 5}]},
+                {'exercise_template_id': 'default', 'sets': [{'weight_kg': 62.5, 'reps': 5}]}])
+            exercises = build_hevy_workout(entry)['workout']['exercises']
+            self.assertAlmostEqual(exercises[0]['sets'][0]['weight_kg']*factor, 23)
+            self.assertEqual(exercises[1]['sets'][0]['weight_kg'], 62.5)
+            self.assertEqual(entry['exercises'][0]['sets'][0]['weight_kg'], 22.5/factor)
+            if global_unit == 'kg':
+                self.assertEqual(exercises[2]['sets'][0]['weight_kg'], 62.5)
+            else:
+                self.assertAlmostEqual(exercises[2]['sets'][0]['weight_kg']*factor, 138)
+            self.assertNotIn('weight_unit', exercises[0], 'Unit metadata is not sent to Hevy')
+
+    def test_invalid_exercise_unit_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_hevy_workout(_entry(exercises=[{'exercise_template_id': 'x', 'weight_unit': 'stone', 'sets': [{'reps': 1}]}]))
+
 
 class TestBody(unittest.TestCase):
 
