@@ -63,6 +63,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Trial controls moved to Settings (2026-10-25): on/off controls, compact history and dashboard access now live under Performance model trial in Settings. Removes the trial card from the Log start screen and the Model trial destination from shared navigation; automatic recording and saved preferences are unchanged.
+
 - Model trial dashboard (2026-10-24): `/trial` shows movement names, per-model/mode collection progress, expected vs actual categories and pre-workout observations over time, plus expandable saved-set/check-in details. Unsaved snapshots from open/discarded drafts stay separate and hidden; they do not count toward comparisons, coverage or the review clock. Old unrecorded discard actions cannot be distinguished from open drafts. Charts reuse Progress/Stress date, zoom and inspection controls. Newly completed trials freeze actual representative set measurements. Full dashboard history avoids the compact history's former 100-record limit.
 
 - Automatic model-trial recording (2026-10-24): enabled trials capture each unstarted movement after a short pause once soreness and the planned working set are filled in, replacing the per-movement Record button. Preserves immutable snapshots, hidden results, unknown inputs and late-entry exclusions; failures leave logging available and retry on a subsequent pre-set edit. Frontend regression checks cover eligibility, failures/retries and duplicate suppression.

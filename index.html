@@ -441,6 +441,16 @@
     h1, h2 { letter-spacing: -.025em; }
     :where(button, a, input, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   </style>
+<style>
+    .trial-optin-row { display:flex; align-items:center; flex-wrap:wrap; gap:16px 24px; }
+    .trial-optin-copy { flex:1 1 300px; min-width:0; }
+    .trial-optin-heading { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+    .trial-optin-heading h2 { margin:0; }
+    .trial-optin-state { border:1px solid var(--accent); border-radius:999px; padding:2px 10px; font-size:13px; }
+    #trialEnabled { min-height:48px; min-width:190px; }
+    #trialHistory summary { cursor:pointer; min-height:44px; padding:10px 0; }
+    @media(max-width:599px) { #trialEnabled { width:100%; } }
+</style>
 </head>
 <body>
   <div class="app">
@@ -461,6 +471,19 @@
 
     <main class="views">
       <section id="view-settings" class="view active" aria-live="polite">
+    <section id="trialOptin" class="panel trial-optin" aria-labelledby="trialOptinTitle">
+      <div class="trial-optin-row">
+        <div class="trial-optin-copy">
+          <div class="trial-optin-heading"><h2 id="trialOptinTitle">Performance model trial</h2><span id="trialSettingState" class="trial-optin-state">Optional</span></div>
+          <p id="trialOptinDescription">Enter your pre-workout scores and planned sets. The trial records automatically before lifting; see the result after saving.</p>
+        </div>
+        <button id="trialEnabled" class="btn primary" type="button" aria-pressed="false" aria-describedby="trialOptinDescription trialSettingStatus" disabled>Enable model trial</button>
+      </div>
+      <p id="trialSettingStatus" class="hint" role="status">Loading trial setting…</p>
+      <p><a href="/trial">View model trial dashboard →</a></p>
+      <details id="trialHistory" hidden><summary>Model trial history</summary><div></div></details>
+    </section>
+
         <div class="panel">
           <h2>Hevy API Key</h2>
           <p>Connect your Hevy account key for exercise sync and workout write-back.</p>
@@ -710,6 +733,56 @@
     init();
   </script>
 
+<script id="trial-settings">
+  const trialSettingRefs = Object.fromEntries(['trialEnabled','trialSettingState','trialSettingStatus','trialHistory'].map(id=>[id,document.getElementById(id)]));
+  let trialSettingEnabled=false, trialSettingLoaded=false;
+  async function trialSettingsApi(url,options={}) {
+    const response=await fetch(url,options);
+    if(!response.ok)throw Error('Request failed ('+response.status+').');
+    return response.json();
+  }
+  function renderTrialSetting() {
+    const button=trialSettingRefs.trialEnabled;
+    button.textContent=trialSettingEnabled?'Turn off trial':'Enable model trial';
+    button.className=trialSettingEnabled?'btn':'btn primary';
+    button.setAttribute('aria-pressed',String(trialSettingEnabled));
+    button.disabled=!trialSettingLoaded;
+    trialSettingRefs.trialSettingState.textContent=trialSettingEnabled?'On':'Off · Optional';
+    trialSettingRefs.trialSettingStatus.textContent=trialSettingEnabled?'On · Trial controls appear in your workouts. Results stay hidden until saving.':'Off · Enable to show trial controls in your workouts.';
+  }
+  async function loadTrialSetting() {
+    try {
+      const data=await trialSettingsApi('/fatigue-trial/settings');
+      trialSettingEnabled=data.enabled;trialSettingLoaded=true;renderTrialSetting();
+    } catch(err) { trialSettingRefs.trialSettingState.textContent='Unavailable';trialSettingRefs.trialSettingStatus.textContent='Could not load trial setting. Reload to retry. '+err.message; }
+  }
+  async function toggleTrialSetting() {
+    if(trialSettingRefs.trialEnabled.disabled||!trialSettingLoaded)return;
+    trialSettingRefs.trialEnabled.disabled=true;
+    trialSettingRefs.trialSettingStatus.textContent='Saving trial setting…';
+    try {
+      const data=await trialSettingsApi('/fatigue-trial/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!trialSettingEnabled})});
+      trialSettingEnabled=data.enabled;renderTrialSetting();
+    } catch(err) { renderTrialSetting();trialSettingRefs.trialSettingStatus.textContent='Could not save trial setting: '+err.message; }
+  }
+  async function loadTrialHistory() {
+    const details=trialSettingRefs.trialHistory,box=details.querySelector('div');
+    const line=text=>{const p=document.createElement('p');p.className='hint';p.textContent=text;box.append(p);};
+    try {
+      const data=await trialSettingsApi('/fatigue-trial/dashboard');box.replaceChildren();
+      const completed=data.entries.filter(r=>r.status==='completed');
+      for(const r of completed.slice(-10).reverse())line(r.workout_start.slice(0,10)+' · '+r.title+' · Expected: '+r.prediction.replaceAll('_',' ')+'; observed: '+r.observed.replaceAll('_',' '));
+      if(!completed.length)line('No saved trial workouts yet.');
+      const pending=data.entries.filter(r=>r.status==='recorded').length;
+      if(pending)line(pending+' snapshots have no saved workout (open or discarded drafts). They do not count toward comparisons.');
+      for(const c of data.cohorts)line(c.title+' · '+c.eligible_predictions+'/12 eligible predictions · '+(c.review_at?'Review '+c.review_at.slice(0,10):'Awaiting first saved trial workout')+' · '+c.status);
+    } catch(err) { box.replaceChildren();line('History unavailable. Open the dashboard or reload to retry.'); }
+    details.hidden=false;
+  }
+  trialSettingRefs.trialEnabled.addEventListener('click',toggleTrialSetting);
+  loadTrialSetting();
+  loadTrialHistory();
+</script>
 <script id="page-navigation">
   (() => {
     const back=document.getElementById("pageBack");

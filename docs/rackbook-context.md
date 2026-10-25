@@ -11,6 +11,8 @@ Automatic trial recording (2026-10-24): when enabled, the log records each unsta
 
 Model trial dashboard (2026-10-24): `/trial` and read-only `GET /fatigue-trial/dashboard` show named movements, separate model/mode cohorts, categorical expected/actual history, frozen pre-workout scores and saved set details. All history is available; unsaved snapshots are separated and reveal no predictions. They do not start the review clock or dilute coverage; review begins six weeks after recording the first saved prospective observation. Newly completed records also freeze the actual representative set; older records display available local saved measurements. Shared Chart.js controls support date ranges, zoom and tap/keyboard inspection. No Hevy calls or trial-record edits are performed by the dashboard.
 
+Trial controls location (2026-10-25): Settings (`/legacy#settings`) owns the Performance model trial toggle, compact history and dashboard link. Model trial is absent from shared navigation and the Log start screen. The Log still reads the server setting at startup and retains automatic recording, in-workout daily check-in display and saved results. The `/trial` route remains directly accessible.
+
 ---
 
 ## What this is now

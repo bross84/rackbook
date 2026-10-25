@@ -1,6 +1,6 @@
 # Optional shared-model trial v0
 
-This is the pre-merge trial, not a consolidation or a validated fatigue measure. Both apps remain operational. The setting is disabled by default; enable **Optional model trial** on the log's start screen. Existing workload scores and TS trends remain separate.
+This is the pre-merge trial, not a consolidation or a validated fatigue measure. Both apps remain operational. The setting is disabled by default; enable **Optional model trial** in Settings. Existing workload scores and TS trends remain separate.
 
 ## Recording and review
 
@@ -8,7 +8,7 @@ Select movement soreness/pain answers and enter intended working sets. With the 
 
 Successful workout saving reveals frozen expected/observed classifications. Missing, removed or incompatible working sets are unclassified. Corrections and suggested/actual training changes are append-only notes, never replacements for original predictions. Enabled trials record missing assessments when a workout is saved. Trial failures are caught after normal Hevy/local/TS/microcycle saving and must never cause a second Hevy post.
 
-The **Model trial** navigation link opens `/trial`: named movement and model/mode filters, categorical expected/actual history, frozen movement soreness and daily tiredness/recovery plots, and expandable saved-set/check-in details. Unknown predictions/outcomes remain gaps with explicit labels in session history. Date windows, zoom, tap and keyboard inspection reuse the Progress/Stress chart controls. The read-only `GET /fatigue-trial/dashboard` includes full history without the compact comparisons endpoint's 100-record limit. Newly completed records freeze representative saved-set measurements; older records display available local saved measurements.
+In **Settings → Performance model trial**, **View model trial dashboard** opens `/trial`: named movement and model/mode filters, categorical expected/actual history, frozen movement soreness and daily tiredness/recovery plots, and expandable saved-set/check-in details. Unknown predictions/outcomes remain gaps with explicit labels in session history. Date windows, zoom, tap and keyboard inspection reuse the Progress/Stress chart controls. The read-only `GET /fatigue-trial/dashboard` includes full history without the compact comparisons endpoint's 100-record limit. Newly completed records freeze representative saved-set measurements; older records display available local saved measurements.
 
 Snapshots without a saved workout appear separately as **Not saved**. They may belong to open or discarded drafts; earlier discard actions were not recorded. No predictions are revealed for these entries. They do not count toward evaluation, dilute coverage or start the review clock. No snapshots are deleted. The compact Log history uses movement names and summarizes these unsaved entries.
 

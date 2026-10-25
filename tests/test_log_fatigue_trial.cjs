@@ -13,7 +13,7 @@ let calls=[], saves=0, failSettings=false, failSnapshot=false, scheduled;
 const context = vm.createContext({el,$,Date,JSON,Number,Boolean,encodeURIComponent,
   setTimeout(fn){scheduled=fn;return 1},clearTimeout(){scheduled=null},renderWorkout(){},
   cardEls:new Map(),saveDraft(){saves++},api:async(url,options)=>{calls.push([url,options]);
-    if(url==='/fatigue-trial/settings') { if(failSettings) throw new Error('Offline'); return {enabled:JSON.parse(options.body).enabled}; }
+    if(url==='/fatigue-trial/settings') { if(failSettings) throw new Error('Offline'); return {enabled:true,preview:false}; }
     if(failSnapshot)throw Error('Offline');return {id:'snapshot',prospective:true}},
   draft:{startedAt:'2026-10-22T15:00:00Z',exercises:[],soreness:{squat:{level:0,pain:true}}},
   sorenessPatterns:{Squat:'squat'}});
@@ -54,18 +54,10 @@ assert.equal(typeof scheduled,'function');
   context.showTrialResults([{id:'snapshot',exercise_template_id:'squat',prediction:'uncertain',observed:'unclassified',prospective:true,
     across_sessions:{status:'insufficient evidence',message:'Still collecting a baseline.'},reasons:['Missing RPE'],evidence:{}}]);
   assert.ok(JSON.stringify($('trialResults')).includes('unclassified'));
-  vm.runInContext('trialEnabled=false; renderTrialSetting()',context);
-  assert.equal($('trialEnabled').textContent,'Enable model trial');
-  assert.equal($('trialSettingState').textContent,'Off · Optional');
-  const enabling=$('trialEnabled').events.click();
-  assert.equal($('trialEnabled').disabled,true,'prevent duplicate requests while saving');
-  await enabling;
-  assert.equal($('trialEnabled').attrs['aria-pressed'],'true');
-  assert.equal($('trialEnabled').textContent,'Turn off trial');
-  failSettings=true;
-  await $('trialEnabled').events.click();
-  assert.equal($('trialEnabled').attrs['aria-pressed'],'true','failed save retains the saved setting');
-  assert.equal($('trialEnabled').disabled,false);
-  assert.ok($('trialSettingStatus').textContent.includes('Offline'));
+  assert.ok(!html.includes('id="trialOptin"'),'Trial controls live in Settings');
+  assert.ok(!html.includes('id="trialEnabled"'),'Log still reads the saved setting but cannot toggle it');
+  await context.loadTrialPreference();
+  assert.equal($('previewNotice').hidden,true);
+  assert.equal(calls.at(-1)[0],'/fatigue-trial/settings','Automatic recording still loads the server preference');
   console.log('Automatic trial recording, eligibility, retries, deduplication, hidden state and results passed');
 })().catch(err=>{console.error(err);process.exitCode=1});

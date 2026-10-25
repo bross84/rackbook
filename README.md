@@ -171,7 +171,7 @@ Verify that Rackbook can read the check-in:
 curl -fsS "http://localhost:8126/fatigue-trial/daily?day=$(date +%F)" | python3 -m json.tool
 ```
 
-`available` means today's check-in was read; `stale` means an older check-in was read; `unavailable` means no check-in could be retrieved. Enable **Performance model trial** on the Log start screen to use check-ins in trial assessments.
+`available` means today's check-in was read; `stale` means an older check-in was read; `unavailable` means no check-in could be retrieved. Enable **Performance model trial** in Settings to use check-ins in trial assessments.
 
 ### Deployment without the bridge
 

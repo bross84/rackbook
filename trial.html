@@ -180,7 +180,7 @@
 <main>
   <header class="app-header">
     <div class="page-heading"><a href="/log" class="page-back">← Log</a><h1>Model trial</h1></div>
-    <nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/trial" aria-current="page">Model trial</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
+    <nav class="app-nav" aria-label="Pages"><a href="/log">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <p class="intro note">Compare frozen expectations with saved workout performance. The trial tests fixed experimental rules; it does not change your training.</p>
   <section class="card controls" aria-label="Trial filters">
@@ -266,7 +266,7 @@ async function loadDashboard(){
   const movements=new Map(dashboard.entries.map(r=>[r.exercise_template_id,r.title]));
   options($('movement'),[...movements].sort((a,b)=>a[1].localeCompare(b[1])),$('movement').value);
   selectMovement();$('content').hidden=false;
-  if(!movements.size)$('status').textContent='No trial observations yet. Enable Performance model trial on the Log page, enter pre-workout scores and planned sets, then log normally.';
+  if(!movements.size)$('status').textContent='No trial observations yet. Enable Performance model trial in Settings, enter pre-workout scores and planned sets, then log normally.';
  }catch(err){$('status').textContent=err.message+' Use Refresh to retry.';}
  finally{$('refresh').disabled=false;}
 }

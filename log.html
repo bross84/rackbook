@@ -311,18 +311,7 @@
     #title { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0 0 10px; font-size: 19px; font-weight: 650; letter-spacing: -.02em; }
     #clock { font-size: 12px; }
     .workout-log .hint { line-height: 1.55; }
-    .workout-log .trial-optin { border-color: var(--accent); background: var(--accent-soft); margin-bottom: 16px; }
-    .trial-optin-row { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 24px; }
-    .trial-optin-copy { flex: 1 1 300px; min-width: 0; }
-    .trial-optin-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-    .trial-optin-heading h2 { font-size: 20px; margin: 0; }
-    .trial-optin-state { border: 1px solid var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 650; }
-    .trial-optin-copy p { margin: 8px 0 0; font-size: 14px; }
-    #trialEnabled { min-height: 48px; min-width: 190px; }
-    #trialSettingStatus { margin: 12px 0 0; }
-    #trialHistory { margin-top: 12px; }
-    #trialHistory summary { cursor: pointer; min-height: 44px; display: list-item; padding: 10px 0; }
-    @media (max-width: 599px) { #trialEnabled { width: 100%; } }
+
     .exhead { padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px; gap: 8px; }
     .exhead .ex-title { font-size: 18px; font-weight: 650; }
     .exhead .chip { background: var(--soft); border-color: var(--line); min-height: 36px; }
@@ -401,24 +390,12 @@
   <header class="app-header">
     <div class="page-heading"><div class="page-title"><span class="eyebrow">Rackbook</span><h1>Log workout</h1></div></div>
     <div class="header-tools"><span class="units" role="group" aria-label="Weight unit"><button id="unitKg" type="button">kg</button><button id="unitLb" type="button">lb</button></span></div>
-    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/trial">Model trial</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
+    <nav class="app-nav" aria-label="Pages"><a href="/log" aria-current="page">Log workout</a><a href="/microcycles">Microcycles</a><a href="/recent">Recent</a><a href="/progress">Progress</a><a href="/stress">Stress</a><a href="/rpe-charts">RPE tables</a><a href="/legacy#settings">Settings</a></nav>
   </header>
   <div id="msg"></div>
 
   <p id="previewNotice" class="hint" hidden>Local preview · Saving to Hevy is disabled here.</p>
   <section id="start" hidden>
-    <section id="trialOptin" class="card trial-optin" aria-labelledby="trialOptinTitle">
-      <div class="trial-optin-row">
-        <div class="trial-optin-copy">
-          <div class="trial-optin-heading"><h2 id="trialOptinTitle">Performance model trial</h2><span id="trialSettingState" class="trial-optin-state">Optional</span></div>
-          <p id="trialOptinDescription">Enter your pre-workout scores and planned sets. The trial records automatically before lifting; see the result after saving.</p>
-        </div>
-        <button id="trialEnabled" class="primary" type="button" aria-pressed="false" aria-describedby="trialOptinDescription trialSettingStatus" disabled>Enable model trial</button>
-      </div>
-      <p id="trialSettingStatus" class="hint" role="status">Loading trial setting…</p>
-      <p><a href="/trial">View model trial dashboard →</a></p>
-      <details id="trialHistory" hidden><summary>Model trial history</summary><div></div></details>
-    </section>
     <section id="plannedStart" class="card" hidden></section>
     <button id="empty" class="wide" type="button" style="margin-bottom:12px">Start an empty workout</button>
     <p class="muted" style="margin:0 0 8px">Or copy a recent workout. Its exercises and sets come across as a starting point.</p>
@@ -1133,6 +1110,12 @@
 
   // ── Workout screen ──────────────────────────────────────────────────────────
   let trialEnabled = false, trialDaily = null;
+  async function loadTrialPreference() {
+    try {
+      const value=await api('/fatigue-trial/settings');
+      trialEnabled=value.enabled; $('previewNotice').hidden=!value.preview;
+    } catch (_) { say('Trial setting unavailable. Reload to retry automatic recording.'); }
+  }
   let trialRecordTimer;
   const trialRecording = new WeakSet();
   function queueTrialRecording() {
@@ -1170,14 +1153,6 @@
       }
     }
   }
-  function renderTrialSetting() {
-    $("trialEnabled").textContent = trialEnabled ? "Turn off trial" : "Enable model trial";
-    $("trialEnabled").className = trialEnabled ? "" : "primary";
-    $("trialEnabled").setAttribute("aria-pressed", String(trialEnabled));
-    $("trialEnabled").disabled = false;
-    $("trialSettingState").textContent = trialEnabled ? "On" : "Off · Optional";
-    $("trialSettingStatus").textContent = trialEnabled ? "On · Trial controls will appear in your workouts. Results stay hidden until saving." : "Off · Enable to show trial controls in your workouts.";
-  }
   function localTrialDate() {
     const d = new Date();
     return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
@@ -1191,34 +1166,7 @@
     details.append(el("p", "hint", "Original Hevy Fatigue scale: 0–4. " + (trialDaily.date || "No check-in available") + ". Date-only source; fetched " + (trialDaily.fetched_at || "now") + "."));
     for (const [key,value] of Object.entries(trialDaily.ratings || {})) details.append(el("p", "hint", key.replaceAll("_", " ") + ": " + (value ?? "Unknown")));
     box.append(details);
-    $("trialHistory").hidden = false;
-    try {
-      const data = await api("/fatigue-trial/dashboard"), results = data.entries;
-      const target = $("trialHistory").querySelector("div"); target.replaceChildren();
-      for (const r of results.filter(r=>r.status==='completed').slice(-10).reverse()) {
-        const item = el("p", "hint", r.workout_start.slice(0,10) + " · " + r.title + " · " +
-          (r.status === "completed" ? "Expected: " + r.prediction.replaceAll("_"," ") + "; observed: " + r.observed.replaceAll("_"," ") : "Trial recorded · Result hidden"));
-        target.append(item);
-      }
-      const pending=results.filter(r=>r.status==='recorded').length;
-      if(pending)target.append(el('p','hint',pending+' snapshots have no saved workout (open or discarded drafts). They do not count toward comparisons.'));
-      const evaluations = data.cohorts;
-      for (const cohort of evaluations) {
-        target.append(el("p", "hint", cohort.title + " · " + cohort.eligible_predictions + "/12 eligible predictions · " + (cohort.review_at?'Review '+cohort.review_at.slice(0,10):'Awaiting first saved trial workout') + " · " + cohort.status));
-      }
-    } catch (_) {}
   }
-  $("trialEnabled").addEventListener("click", async () => {
-    if ($("trialEnabled").disabled) return;
-    $("trialEnabled").disabled = true;
-    $("trialSettingStatus").textContent = "Saving trial setting…";
-    try {
-      const value = await api("/fatigue-trial/settings", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({enabled:!trialEnabled})});
-      trialEnabled = value.enabled; renderTrialSetting();
-      if (draft) renderWorkout();
-      refreshTrialDaily();
-    } catch (err) { renderTrialSetting(); $("trialSettingStatus").textContent = "Could not save trial setting: " + err.message; }
-  });
   function renderTrial(ex, box) {
     if (!trialEnabled && !ex.trialId) return;
     box.className = "trial-panel"; box.setAttribute("aria-label", "Optional model trial for " + ex.title);
@@ -2243,8 +2191,14 @@
   });
 
   // ── Boot ────────────────────────────────────────────────────────────────────
+  window.addEventListener('pageshow',async event=>{
+    if(!event.persisted)return;
+    await loadTrialPreference();
+    if(draft)renderWorkout();
+    refreshTrialDaily();
+  });
   Promise.all([loadReference(), api("/soreness/patterns").then(value => { sorenessPatterns = value; }).catch(() => {}),
-    api("/fatigue-trial/settings").then(value => { trialEnabled=value.enabled; renderTrialSetting(); $("previewNotice").hidden=!value.preview; }).catch(() => { $("trialSettingStatus").textContent="Trial setting unavailable. Reload to try again."; })]).then(() => {
+    loadTrialPreference()]).then(() => {
     refreshTrialDaily();
     draft = loadDraft();
     if (draft && Array.isArray(draft.exercises)) {
