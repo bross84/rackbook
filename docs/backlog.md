@@ -63,6 +63,8 @@ The gym is the garage on the home network, so none of this blocks use there.
 
 ## Done recently
 
+- Recent workouts single column (2026-10-25): workout cards stack vertically on desktop and tablet as well as phones, retaining newest-first order and older-workout pagination.
+
 - Completed microcycles section (2026-10-25): the builder groups fully completed, nonempty plans below unfinished plans in a collapsed-by-default section with a count. Edit, Duplicate and Delete remain available inside it; refreshes preserve its open/closed state. Empty plans remain in the main library.
 
 - Trial controls moved to Settings (2026-10-25): on/off controls, compact history and dashboard access now live under Performance model trial in Settings. Removes the trial card from the Log start screen and the Model trial destination from shared navigation; automatic recording and saved preferences are unchanged.

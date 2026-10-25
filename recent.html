@@ -69,10 +69,10 @@
     .soreness-levels button[aria-pressed="true"] { background: var(--accent-soft); outline: 2px solid var(--accent); }
     .soreness-editor fieldset { border: 0; padding: 0; margin: 12px 0; }
     .pain-label { display: flex; gap: 8px; align-items: center; min-height: 44px; }
-    /* Wide screens (a tablet on its side): use the width, two workouts side by side. */
+    /* Keep workouts in one chronological column on wide screens too. */
     @media (min-width: 900px) {
       main { max-width: 1000px; }
-      #list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+      #list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
       #list .card { margin: 0; }
       #keyform { max-width: 560px; }
       #more { display: block; max-width: 560px; margin: 12px auto 0; }
