@@ -1753,9 +1753,7 @@
           ex.trialStarted = true;
           if (trialEnabled) api("/fatigue-trial/started", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_key:draft.startedAt,exercise_template_id:ex.template_id})}).catch(()=>{});
         }
-        if (s.done && s.type !== "warmup" && exerciseComplete(ex)) {
-          ex.collapsed = true; closeNumberPad();
-        } else if (!s.done) ex.collapsed = false;
+        if (!s.done) ex.collapsed = false;
         updateCollapse();
         if (s.done && !s.arpe) s.arpe = s.rpe;   // from here the RPE box is the RPE you logged
         row.classList.toggle("done", s.done);

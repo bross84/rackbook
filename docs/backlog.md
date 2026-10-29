@@ -175,3 +175,5 @@ The gym is the garage on the home network, so none of this blocks use there.
 - Microcycle save feedback (2026-10-22): a successful plan save closes the editor and shows Plan saved above the refreshed library. Failed saves retain the open editor and edits. Checked with `node tests/test_mesocycle_ui.cjs`.
 
 - Consistent Stress charts (2026-10-22): dashboard and details now match Progress with Chart.js styling, elapsed-time/date axes, zoom/pan/date controls and hover/tap/keyboard inspection. Performance/soreness charts share the selected date window/session. Preserves usual-window shading, stress comparison markers, categorical soreness, pain flags and missing-data gaps. Calculations unchanged.
+
+- Manual movement collapse (2026-10-28): completing all working sets on `/log` leaves the card open. Manual Collapse/Reopen, draft persistence, completion status and rest timers remain available. Checked with `node tests/test_log_collapse.cjs`.
