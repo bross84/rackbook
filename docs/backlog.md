@@ -177,3 +177,5 @@ The gym is the garage on the home network, so none of this blocks use there.
 - Consistent Stress charts (2026-10-22): dashboard and details now match Progress with Chart.js styling, elapsed-time/date axes, zoom/pan/date controls and hover/tap/keyboard inspection. Performance/soreness charts share the selected date window/session. Preserves usual-window shading, stress comparison markers, categorical soreness, pain flags and missing-data gaps. Calculations unchanged.
 
 - Manual movement collapse (2026-10-28): completing all working sets on `/log` leaves the card open. Manual Collapse/Reopen, draft persistence, completion status and rest timers remain available. Checked with `node tests/test_log_collapse.cjs`.
+
+- Tablet set-tap stability (2026-10-28): outside taps dismiss the number pad after the target click, keeping rows steady through pointer-down and button focus so a set checkmark cannot shift under the finger. Keypad regression checks cover the event sequence.

@@ -2188,11 +2188,18 @@
     input.setSelectionRange(edit.caret, edit.caret);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  let padOutsideTap = false;
   document.addEventListener("pointerdown", (e) => {
+    // Keep the layout steady until the tapped control has handled its click.
+    padOutsideTap = Boolean(padInput && !numberpad.contains(e.target) && !e.target.closest("input[data-keypad]"));
+  });
+  document.addEventListener("click", (e) => {
+    padOutsideTap = false;
     if (padInput && !numberpad.contains(e.target) && !e.target.closest("input[data-keypad]")) closeNumberPad();
   });
+  document.addEventListener("pointercancel", () => { padOutsideTap = false; });
   document.addEventListener("focusout", () => {
-    setTimeout(() => { if (padInput && document.activeElement !== padInput && !numberpad.contains(document.activeElement)) closeNumberPad(); }, 0);
+    setTimeout(() => { if (!padOutsideTap && padInput && document.activeElement !== padInput && !numberpad.contains(document.activeElement)) closeNumberPad(); }, 0);
   });
   window.addEventListener("resize", () => { if (padInput) requestAnimationFrame(sizeNumberPad); });
 
