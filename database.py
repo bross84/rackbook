@@ -293,6 +293,13 @@ def init_db() -> None:
             "ALTER TABLE exercise_refs ADD COLUMN weight_unit TEXT CHECK(weight_unit IN ('kg', 'lb'))",
         ):
             try:
+                if "ADD COLUMN weight_unit" in ddl and "weight_unit" not in {
+                    row[1] for row in conn.execute("PRAGMA table_info(exercise_refs)")
+                }:
+                    # Materialize ALTER-added defaults before SQLite validates the
+                    # checked column on older rows. Values are preserved exactly.
+                    conn.execute("UPDATE exercise_refs SET ls=ls, tm_pct=tm_pct, step_kg=step_kg, "
+                                 "step_lb=step_lb, bar_kg=bar_kg, chain_kg=chain_kg")
                 conn.execute(ddl)
             except Exception:
                 pass  # column already exists
