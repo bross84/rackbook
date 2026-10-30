@@ -36,6 +36,12 @@ def init_db() -> None:
                 hevy_workout_id TEXT,
                 UNIQUE(session_key, exercise_template_id)
             );
+            CREATE TABLE IF NOT EXISTS fatigue_trial_shadow (
+                trial_id TEXT NOT NULL REFERENCES fatigue_trial_snapshots(id),
+                model_version TEXT NOT NULL,
+                snapshot TEXT NOT NULL,
+                PRIMARY KEY(trial_id, model_version)
+            );
             CREATE TABLE IF NOT EXISTS fatigue_trial_starts (
                 session_key TEXT NOT NULL,
                 exercise_template_id TEXT NOT NULL,

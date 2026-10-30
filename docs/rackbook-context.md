@@ -15,6 +15,12 @@ Trial controls location (2026-10-25): Settings (`/legacy#settings`) owns the Per
 
 ---
 
+Smoother daily model shadow (2026-10-30): new trial records also freeze
+`hf-recovery-shadow-v1` using a pinned pure `recovery-confirmation-v1` model and
+read-only sibling DB inputs. Parent trial records/results and v0 cohorts remain
+unchanged; no historical backfill. New outputs remain hidden until save and appear
+separately on `/trial`. See the trial guide for hashes, cutoff and evidence rules.
+
 ## What this is now
 
 Rackbook is a personal workout logger and strength tracker that saves to [Hevy](https://hevyapp.com). It started as a 5/3/1 BBB planner and has moved away from that: the main thing now is the **log page** (`/log`), which plans each set's weight from an RPE table and a per-movement base number, saves the finished workout to Hevy, and keeps its own record of every set. On top of that it builds **RPE tables for squat, bench and deadlift from the user's own sets** (`/rpe-charts`). The original 5/3/1 program designer still works at `/legacy` but is no longer developed.

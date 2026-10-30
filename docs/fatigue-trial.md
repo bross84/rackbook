@@ -54,3 +54,28 @@ Add `--legacy-repo <version-pinned-hevy-source>` and `--legacy-python <its-runti
 `docker compose -f docker-compose.local.yml up -d --build` updates the existing `531bbb` container on port 8126, retaining external volume `531bbb-ar_531bbb-data` and `/data/531bbb.db`. The standard homelab Compose file is unchanged. Before updating, use SQLite backup inside the running container and retain its previous image tag. Local Compose disables Hevy writes for preview checks; remove `RACKBOOK_READ_ONLY_PREVIEW` when intentionally using it as a real logger. Homelab Compose does not set it.
 
 Available local Rackbook data had zero local sets/TS, and the Hevy Fatigue file was empty. Meaningful live-data reconciliation/replay requires homelab snapshots. Phone usability and prospective collection remain necessary before a merge decision.
+
+## Smoother daily model shadow arm (2026-10-30)
+
+New snapshots additionally capture `hf-recovery-shadow-v1` alongside, not in place
+of, `shared-trial-v0`. The pinned pure model in `hevy_recovery_model.py` is the
+unchanged Hevy Fatigue `recovery-confirmation-v1` implementation; it needs no
+running sibling API or SQLAlchemy. Its source SHA-256, exact input snapshot/hash,
+calendar cutoff and capture time are frozen in `fatigue_trial_shadow`, keyed by
+trial ID and arm version. Reads use one read-only SQLite transaction against the
+existing `HEVY_FATIGUE_DB_PATH` bridge. No credentials are selected, and target-day
+workouts are excluded. Missing data or monitoring reacquisition retains the
+model's Continue Training as Normal fallback and explicit status.
+
+Existing parent snapshots, model versions, completion JSON, outcomes, notes and
+legacy evaluation metrics are not rewritten or backfilled. Repeat recording
+returns the original record. Unsaved outputs remain hidden; after saving, the
+comparison endpoint and `/trial` show a separate frozen daily action, score and
+context. Descriptive `shadow_cohorts` counts separate version/exercise/mode and
+exclude unsaved/late observations. These are daily actions alongside movement
+outcomes, not movement predictions; no daily-to-performance label conversion or
+accuracy claim is made. Future model changes require a distinct arm/version.
+Shadow failures cannot prevent legacy recording or a normal workout save.
+
+Tests: `python -m unittest tests.test_fatigue_trial_smoother -v`;
+`node tests/test_trial_shadow_ui.cjs`; existing trial/settings/dashboard tests.

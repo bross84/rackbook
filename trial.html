@@ -194,6 +194,7 @@
     <section id="summary" class="card" aria-label="Collection progress"></section>
     <section class="card"><h2>Expected vs actual performance</h2><p class="note">Blue triangles: expected · Green circles: actual. These are categories, not predicted weights. Uncertain expectations and unclassified outcomes remain gaps; the session history shows their labels. Late entries are shown but excluded from evaluation.</p><div id="comparison"></div></section>
     <section class="card"><h2>Pre-workout observations</h2><p class="note">Frozen at recording time. Movement soreness uses 0–3; daily tiredness and poor recovery retain Hevy Fatigue’s 0–4 scale. Missing daily check-ins remain gaps.</p><div id="observations" class="observation-grid"></div></section>
+    <section class="card"><h2>Smoother daily model · separate shadow arm</h2><p class="note">Frozen alongside new observations and revealed after saving. These daily training actions are not movement-performance predictions. Historical trial records remain unchanged.</p><div id="shadow-summary"></div></section>
     <section class="card"><h2>Saved session history</h2><div id="sessions"></div></section>
     <details class="card"><summary id="pendingTitle">Not saved</summary><p class="note">These snapshots have no saved workout. They may belong to an open or discarded draft. They reveal no predictions, count toward no eligible comparisons, and do not start the review clock.</p><div id="pending"></div></details>
   </div>
@@ -241,10 +242,21 @@ function renderDashboard(){
  for(const [key,title,color,bounds] of [['soreness','Movement soreness · 0–3','#4a79f5',{min:0,max:3}],['tiredness','Daily tiredness · 0–4','#d99132',{min:0,max:4}],['recovery','Daily poor recovery · 0–4','#9c79db',{min:0,max:4}]]){
   const fig=el('figure');fig.append(el('figcaption',null,title),RackbookCharts.create(points,{title,bounds,series:[[key,title,color]],categorical:key==='soreness'}));observations.append(fig);
  }
+ const shadowSummary=$('shadow-summary');shadowSummary.replaceChildren();
+ const shadowRows=rows.filter(r=>r.shadow);
+ shadowSummary.append(el('p','note',`${shadowRows.length} saved observations with a frozen smoother-model output in this range. Older records without one are not backfilled.`));
+ const shadowCounts=new Map();
+ for(const r of shadowRows){const key=`${r.shadow.model_version} · ${r.shadow.recommendation_label}`;shadowCounts.set(key,(shadowCounts.get(key)||0)+1);}
+ for(const [label,count] of shadowCounts)shadowSummary.append(el('p',null,`${label}: ${count}`));
  const sessions=$('sessions');sessions.replaceChildren();
  if(!rows.length)sessions.append(el('p','note','No saved trial workouts in this range. Log and save a workout with the trial enabled to begin comparisons.'));
  for(const r of rows.slice().reverse()){
   const details=el('details');details.append(el('summary',null,`${dateText(r.workout_start)} · Expected: ${trialLabels[r.prediction]||'Unavailable'} · Actual: ${trialLabels[r.observed]||'Unavailable'}${r.prospective?'':' · Late entry (excluded)'}`));
+  if(r.shadow){
+   details.append(el('p',null,`Smoother daily model: ${r.shadow.recommendation_label}`));
+   details.append(el('p','note',`${r.shadow.model_version} · ${r.shadow.source_model_version} · ${r.shadow.recommendation_detail}`));
+   details.append(el('p','note',`Raw fatigue: ${r.shadow.combined_score??'Unavailable'} · Fatigue trend: ${r.shadow.smoothed_score??'Unavailable'} · Captured ${dateText(r.shadow.assessed_at)}`));
+  }else details.append(el('p','note','Smoother model: not recorded for this observation. Original trial result preserved.'));
   details.append(el('p',null,`Planned: ${setText(r.planned)} · Saved: ${setText(r.actual)}`));
   details.append(el('p','note',`Movement soreness: ${r.soreness??'Unknown'} / 3 · Pain/joint concern: ${r.pain?'Flagged':'Not flagged'}`));
   details.append(el('p','note',`Daily check-in: ${r.daily?.status||'unavailable'}${r.daily?.date?' · '+r.daily.date:''} · Recorded ${dateText(r.recorded_at)}`));

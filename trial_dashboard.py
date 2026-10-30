@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from database import get_db
 import fatigue_trial as trial
+import fatigue_trial_smoother as smoother
 
 
 class SetObservation(BaseModel):
@@ -34,6 +35,7 @@ class DashboardEntry(BaseModel):
     actual: SetObservation | None = None
     reasons: list[str] = Field(default_factory=list)
     notes: list[dict] = Field(default_factory=list)
+    shadow: dict | None = None
 
 
 class DashboardCohort(trial.TrialEvaluation):
@@ -43,6 +45,7 @@ class DashboardCohort(trial.TrialEvaluation):
 class Dashboard(BaseModel):
     entries: list[DashboardEntry]
     cohorts: list[DashboardCohort]
+    shadow_cohorts: list[dict] | None = None
 
 
 def dashboard():
@@ -76,6 +79,7 @@ def dashboard():
                 sets = [r for r in saved if r['hevy_workout_id'] == row['hevy_workout_id'] and r['exercise_template_id'] == row['exercise_template_id']]
                 numbers = [r['set_number'] for r in sets]
                 actual = trial.representative(sets, data['mode']) if len(numbers) == len(set(numbers)) else None
+            entry['shadow'] = smoother.read(row['id'])
             entry.update(mode=data['mode'], prediction=snapshot['prediction'], observed=completion['observed'],
                          soreness=data['soreness'], pain=bool(row['pain']), daily=snapshot['daily'],
                          planned=dict(weight_kg=data.get('planned_weight_kg'), reps=data['planned_reps'], rpe=data.get('planned_rpe')),
@@ -83,4 +87,8 @@ def dashboard():
                          reasons=snapshot['reasons'], notes=notes.get(row['id'], []))
         entries.append(entry)
     cohorts = [dict(c, title=names.get(c['exercise_template_id'], 'Movement ' + c['exercise_template_id'])) for c in trial.evaluation()]
-    return dict(entries=entries, cohorts=cohorts)
+    result = dict(entries=entries, cohorts=cohorts)
+    shadow_cohorts = smoother.summaries()
+    if shadow_cohorts:
+        result['shadow_cohorts'] = shadow_cohorts
+    return result

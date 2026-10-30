@@ -2,6 +2,11 @@
 
 Things we've decided to do later. One feature at a time: pick the one that matters most, build it small, check it on the phone.
 
+- **Smoother daily shadow arm (2026-10-30):** implemented separate frozen
+`hf-recovery-shadow-v1` outputs beside the unchanged current trial. Legacy records,
+results and evaluation cohorts are preserved. No historical backfill or automatic
+prescription changes. Prospective observation collection and phone review remain.
+
 ## Next features we've talked about
 
 - Trial discoverability (2026-10-23): a prominent Performance model trial card replaces the small opt-in checkbox, with an explanation, explicit On/Off status and a large Enable/Turn off button. The trial remains off by default; settings failures retain the saved state.

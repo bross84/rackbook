@@ -21,6 +21,8 @@ from fatigue_context import build_context
 import fatigue
 import fatigue_relationships
 import soreness
+import fatigue_trial_smoother as smoother
+import logging
 
 VERSION = "shared-trial-v0"
 
@@ -85,6 +87,7 @@ class TrialResult(BaseModel):
     evidence: dict | None = None
     notes: list[dict] | None = None
     actual: dict | None = None
+    shadow: dict | None = None
 
 
 class CompletionInput(BaseModel):
@@ -319,17 +322,36 @@ def record(data, *, now=None):
     snapshot = dict(input=data.model_dump(mode="json"), daily=checkin, baseline=baseline,
                     existing_rackbook=old, context=context, rpe_table=chart, prediction=prediction, reasons=reasons,
                     soreness_source="rackbook-pre-movement", soreness_scale="0–3", assessed_at=now.isoformat())
+    # Capture only for a genuinely new observation. Existing snapshots are never backfilled.
+    try:
+        shadow = smoother.capture(data.local_date, now)
+    except Exception:
+        logging.getLogger(__name__).warning('Shadow capture failed; legacy trial remains available.')
+        shadow = smoother.unavailable(data.local_date, now)
+    created = False
     trial_id = str(uuid4())
     try:
         with closing(get_db()) as conn, conn:
+            # Shadow capture can take time. Recheck the durable first-set marker
+            # while holding the insert lock so intervening starts are excluded.
+            conn.execute("BEGIN IMMEDIATE")
+            late = late or bool(conn.execute(
+                "SELECT 1 FROM fatigue_trial_starts WHERE session_key=? AND exercise_template_id=?",
+                (data.session_key, data.exercise_template_id)).fetchone())
             conn.execute("""INSERT INTO fatigue_trial_snapshots
                 (id, session_key, exercise_template_id, workout_start, recorded_at, model_version, prospective, pain, snapshot)
                 VALUES (?,?,?,?,?,?,?,?,?)""", (trial_id, data.session_key, data.exercise_template_id, start.isoformat(),
                 now.isoformat(), VERSION, int(not late), int(data.pain or any((checkin.get("ratings", {}).get(k) or 0) > 0 for k in ("joint_upper", "joint_lower"))), json.dumps(snapshot)))
+        created = True
     except sqlite3.IntegrityError:
         with closing(get_db()) as conn:
             trial_id = conn.execute("SELECT id FROM fatigue_trial_snapshots WHERE session_key=? AND exercise_template_id=?",
                                    (data.session_key, data.exercise_template_id)).fetchone()[0]
+    if created:
+        try:
+            smoother.store(trial_id, shadow)
+        except Exception:
+            logging.getLogger(__name__).warning('Shadow trial storage failed; legacy trial is preserved.')
     return read(trial_id)
 
 
@@ -344,6 +366,7 @@ def read(trial_id):
                   status="completed" if row["completion"] else "recorded")
     if row["completion"]:
         snapshot = json.loads(row["snapshot"])
+        result["shadow"] = smoother.read(trial_id)
         result.update(prediction=snapshot["prediction"], reasons=snapshot["reasons"], evidence=snapshot,
                       notes=notes, **json.loads(row["completion"]))
     # Do not even serialize verdict/input-reference fields before completion.
