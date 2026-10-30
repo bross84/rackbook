@@ -22,7 +22,6 @@ import fatigue
 import fatigue_relationships
 import soreness
 import fatigue_trial_smoother as smoother
-import logging
 
 VERSION = "shared-trial-v0"
 
@@ -325,8 +324,8 @@ def record(data, *, now=None):
     # Capture only for a genuinely new observation. Existing snapshots are never backfilled.
     try:
         shadow = smoother.capture(data.local_date, now)
-    except Exception:
-        logging.getLogger(__name__).warning('Shadow capture failed; legacy trial remains available.')
+    except Exception as error:
+        smoother.log_failure('capture_call',data.local_date,error)
         shadow = smoother.unavailable(data.local_date, now)
     created = False
     trial_id = str(uuid4())
@@ -350,8 +349,8 @@ def record(data, *, now=None):
     if created:
         try:
             smoother.store(trial_id, shadow)
-        except Exception:
-            logging.getLogger(__name__).warning('Shadow trial storage failed; legacy trial is preserved.')
+        except Exception as error:
+            smoother.log_failure('store',data.local_date,error)
     return read(trial_id)
 
 

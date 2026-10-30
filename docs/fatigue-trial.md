@@ -79,3 +79,15 @@ Shadow failures cannot prevent legacy recording or a normal workout save.
 
 Tests: `python -m unittest tests.test_fatigue_trial_smoother -v`;
 `node tests/test_trial_shadow_ui.cjs`; existing trial/settings/dashboard tests.
+
+## Capture-failure diagnostics and continuation
+
+Failure warnings now identify the phase, safe reason, exception class and SQLite
+symbolic error code without printing raw inputs, credentials or database paths.
+Use `docker logs --since 1h --timestamps rackbook` and look for
+`smoother_capture_unavailable` or `smoother_shadow_store_failed`. Successful and
+normal insufficient-data captures do not emit failure warnings. This logging-only
+change leaves model rules, frozen records and evaluation cohorts untouched.
+
+See [fatigue-handoff.md](fatigue-handoff.md) for the October 30 incident, its
+unknown original cause, exact deployment/probe commands and other-PC setup.

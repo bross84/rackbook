@@ -7,6 +7,12 @@ Things we've decided to do later. One feature at a time: pick the one that matte
 results and evaluation cohorts are preserved. No historical backfill or automatic
 prescription changes. Prospective observation collection and phone review remain.
 
+- **Shadow diagnostic logging / cross-PC handoff (2026-10-30):** implemented safe
+phase/cause/SQLite-code failure warnings with unchanged trial records. Two older
+unavailable captures remain frozen; the later direct probe succeeded and their
+original failure cause is unknown. Deploy this follow-up and collect new warning
+lines if it recurs. Continuation guide: [fatigue-handoff.md](fatigue-handoff.md).
+
 ## Next features we've talked about
 
 - Trial discoverability (2026-10-23): a prominent Performance model trial card replaces the small opt-in checkbox, with an explanation, explicit On/Off status and a large Enable/Turn off button. The trial remains off by default; settings failures retain the saved state.

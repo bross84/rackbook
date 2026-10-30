@@ -146,3 +146,83 @@ class ShadowTests(unittest.TestCase):
         before=shadow.read(rec['id'])
         with patch.object(shadow,'VERSION','future-shadow-v2'):
             self.assertEqual(before,shadow.read(rec['id']))
+
+    def test_capture_failure_logs_stage_and_sqlite_cause_without_changing_records(self):
+        rec=trial.record(self.payload(),now=NOW)
+        self.save(rec)
+        before=self.stored(rec['id'])
+        frozen=shadow.read(rec['id'])
+        with closing(sqlite3.connect(self.hevy)) as c,c:
+            c.execute('DROP TABLE workout_sessions')
+        with self.assertLogs(shadow.logger,level='WARNING') as logs:
+            result=shadow.capture('2026-10-30',NOW)
+        message=' '.join(logs.output)
+        self.assertIn('smoother_capture_unavailable',message)
+        self.assertIn('phase=read_workouts',message)
+        self.assertIn('reason=missing_table:workout_sessions',message)
+        self.assertIn('sqlite_error=SQLITE_ERROR',message)
+        self.assertEqual(result['status'],'unavailable')
+        self.assertEqual(before,self.stored(rec['id']))
+        self.assertEqual(frozen,shadow.read(rec['id']))
+        self.assertNotIn('phase',result)
+        self.assertNotIn('reason',result)
+
+    def test_logging_does_not_expose_input_values_paths_or_credentials(self):
+        sensitive='private-health-input API_KEY=not-a-real-key /private/database.db'
+        with patch.object(shadow.model,'build_history',side_effect=ValueError(sensitive)):
+            with self.assertLogs(shadow.logger,level='WARNING') as logs:
+                result=shadow.capture('2026-10-30',NOW)
+        message=' '.join(logs.output)
+        self.assertIn('phase=calculate',message)
+        self.assertIn('reason=invalid_value',message)
+        self.assertIn('exception=ValueError',message)
+        self.assertNotIn(sensitive,message)
+        self.assertNotIn(str(self.hevy),message)
+        self.assertNotIn('ratings',message)
+        self.assertEqual(result['status'],'unavailable')
+
+    def test_missing_configuration_and_locked_database_are_distinct(self):
+        with patch.dict(os.environ,{'HEVY_FATIGUE_DB_PATH':''}):
+            with self.assertLogs(shadow.logger,level='WARNING') as logs:
+                shadow.capture('2026-10-30',NOW)
+        self.assertIn('phase=configuration',logs.output[0])
+        self.assertIn('reason=bridge_not_configured',logs.output[0])
+        with patch.object(shadow.sqlite3,'connect',side_effect=sqlite3.OperationalError('database is locked')):
+            with self.assertLogs(shadow.logger,level='WARNING') as logs:
+                shadow.capture('2026-10-30',NOW)
+        self.assertIn('phase=open_database',logs.output[0])
+        self.assertIn('reason=database_busy',logs.output[0])
+
+    def test_available_and_insufficient_data_do_not_emit_failure_logs(self):
+        with patch.object(shadow.logger,'warning') as warning:
+            self.assertEqual(shadow.capture('2026-10-30',NOW)['status'],'available')
+            with closing(sqlite3.connect(self.hevy)) as c,c:
+                c.execute("DELETE FROM daily_readiness WHERE date < '2026-10-29'")
+            self.assertEqual(shadow.capture('2026-10-30',NOW)['status'],'insufficient_data')
+        warning.assert_not_called()
+
+    def test_unexpected_capture_and_storage_failures_log_without_breaking_legacy(self):
+        with patch.object(shadow,'capture',side_effect=RuntimeError('sensitive input')):
+            with self.assertLogs(shadow.logger,level='WARNING') as logs:
+                rec=trial.record(self.payload(),now=NOW)
+        self.assertEqual(rec['status'],'recorded')
+        self.assertIn('phase=capture_call',logs.output[0])
+        self.assertIn('exception=RuntimeError',logs.output[0])
+        self.assertNotIn('sensitive input',' '.join(logs.output))
+        self.assertEqual(shadow.read(rec['id'])['status'],'unavailable')
+        with patch.object(shadow,'store',side_effect=sqlite3.OperationalError('database is locked')):
+            with self.assertLogs(shadow.logger,level='WARNING') as logs:
+                second=trial.record(self.payload('other'),now=NOW)
+        self.assertEqual(second['status'],'recorded')
+        self.assertIn('smoother_shadow_store_failed',logs.output[0])
+        self.assertIn('phase=store',logs.output[0])
+        self.assertIsNone(shadow.read(second['id']))
+
+    def test_existing_record_does_not_retry_or_log_a_new_capture(self):
+        rec=trial.record(self.payload(),now=NOW)
+        frozen=shadow.read(rec['id'])
+        with patch.object(shadow,'capture',side_effect=AssertionError('No retry')):
+            with patch.object(shadow.logger,'warning') as warning:
+                self.assertEqual(rec,trial.record(self.payload(),now=NOW))
+        warning.assert_not_called()
+        self.assertEqual(frozen,shadow.read(rec['id']))

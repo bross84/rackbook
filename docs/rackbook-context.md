@@ -3,7 +3,7 @@
 Source of truth for architecture, schema, domain terms, decisions and constraints.
 Read this file at the start of every task. Do not proceed if it is missing. What is done and what is next lives in [`backlog.md`](backlog.md); `plan.md` is only a history log of the original 5/3/1 build.
 
-Last brought up to date: 2026-10-16.
+Last brought up to date: 2026-10-30.
 
 Optional fatigue trial (2026-10-23): disabled-by-default recording/reveal panel on `/log`, isolated `fatigue_trial_*` storage, a read-only Hevy Fatigue check-in bridge and offline backup/replay tools. Normal workout saving remains independent. Experimental v0 rules, APIs, local Docker setup and limitations: [fatigue-trial.md](fatigue-trial.md). Live homelab coverage and prospective validation require its data; available local copies were empty. This does not consolidate the apps.
 
@@ -20,6 +20,13 @@ Smoother daily model shadow (2026-10-30): new trial records also freeze
 read-only sibling DB inputs. Parent trial records/results and v0 cohorts remain
 unchanged; no historical backfill. New outputs remain hidden until save and appear
 separately on `/trial`. See the trial guide for hashes, cutoff and evidence rules.
+
+Shadow capture diagnostics / handoff (2026-10-30): failures now log sanitized
+phase, reason, exception type and SQLite error code. Existing snapshots/results
+remain unchanged. Two homelab observations were unavailable; a later read-only
+probe was available, so the original cause remains unknown. Start with
+[`fatigue-handoff.md`](fatigue-handoff.md) for the incident, deployment/logging
+commands, cross-PC continuation, and next steps.
 
 ## What this is now
 

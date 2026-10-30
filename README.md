@@ -149,6 +149,9 @@ Tests: `python -m unittest discover -s tests -t .`
 
 ## Deployment
 
+For the smoother-model trial, capture diagnostics and continuing development on
+another PC, see [the fatigue integration handoff](docs/fatigue-handoff.md).
+
 ### Homelab updates with the Hevy Fatigue bridge
 
 From `/var/lib/docker-data/AppData/rackbook` on the server, run:

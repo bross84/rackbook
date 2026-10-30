@@ -7,6 +7,9 @@ from collections import Counter, defaultdict
 from contextlib import closing
 from datetime import date
 import hashlib
+import errno
+import logging
+import re
 import json
 import os
 from pathlib import Path
@@ -17,6 +20,38 @@ import hevy_recovery_model as model
 
 VERSION = 'hf-recovery-shadow-v1'
 SOURCE_HASH = hashlib.sha256(Path(model.__file__).read_bytes()).hexdigest()
+
+
+logger = logging.getLogger(__name__)
+
+
+def log_failure(phase, day, error=None, reason=None):
+    """Explain failures in container logs without emitting raw inputs or paths."""
+    if reason is None:
+        if isinstance(error, sqlite3.Error):
+            detail = str(error)
+            missing = re.fullmatch(r'no such (table|column): ([A-Za-z_][A-Za-z0-9_.]*)', detail)
+            if missing:
+                reason = 'missing_' + missing[1] + ':' + missing[2]
+            elif detail in ('database is locked', 'database table is locked', 'database is busy'):
+                reason = 'database_busy'
+            else:
+                reason = 'sqlite_error'
+        elif isinstance(error, OSError):
+            reason = {errno.ENOENT:'file_missing', errno.EACCES:'permission_denied',
+                      errno.EPERM:'permission_denied'}.get(error.errno, 'filesystem_error')
+        elif isinstance(error, ValueError):
+            reason = 'invalid_value'
+        elif isinstance(error, TypeError):
+            reason = 'invalid_type'
+        else:
+            reason = 'unexpected_error'
+    safe_day = day if isinstance(day,str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}',day) else 'invalid_date'
+    event = 'smoother_shadow_store_failed' if phase == 'store' else 'smoother_capture_unavailable'
+    logger.warning('%s model=%s source_model=%s date=%s phase=%s reason=%s exception=%s sqlite_error=%s',
+                   event, VERSION, model.MODEL_VERSION, safe_day, phase, reason,
+                   type(error).__name__ if error is not None else 'none',
+                   getattr(error,'sqlite_errorname',None) or 'none')
 
 
 def unavailable(day, now):
@@ -31,31 +66,41 @@ def capture(day, now):
     result = unavailable(day, now)
     source = os.environ.get('HEVY_FATIGUE_DB_PATH')
     if not source:
+        log_failure('configuration',day,reason='bridge_not_configured')
         return result
+    phase = 'date_validation'
     try:
         target = date.fromisoformat(day)
+        phase = 'open_database'
         with closing(sqlite3.connect(Path(source).resolve().as_uri()+'?mode=ro', uri=True, timeout=1)) as conn:
             conn.row_factory = sqlite3.Row
+            phase = 'begin_read'
             conn.execute('BEGIN')
+            phase = 'read_checkins'
             checkins = [dict(r) for r in conn.execute('''SELECT date, tiredness, perceived_recovery,
                 sore_quad_dom, sore_posterior, sore_upper_push, sore_upper_pull
                 FROM daily_readiness WHERE date <= ? ORDER BY date''', (day,))]
             earliest = checkins[0]['date'] if checkins else day
             from datetime import timedelta
+            phase = 'history_dates'
             floor = (date.fromisoformat(earliest)-timedelta(days=180)).isoformat()
+            phase = 'read_workouts'
             rows = conn.execute('''SELECT s.workout_date, SUM(COALESCE(l.weight_lbs,0)*COALESCE(l.reps,0)) AS volume
                 FROM workout_sessions s JOIN workout_logs l ON l.workout_id=s.hevy_workout_id
                 WHERE s.workout_date >= ? AND s.workout_date < ? GROUP BY s.workout_date ORDER BY s.workout_date''', (floor,day)).fetchall()
+        phase = 'prepare_inputs'
         volumes = {date.fromisoformat(r['workout_date']):float(r['volume'] or 0) for r in rows}
         inputs = dict(checkins=checkins, daily_volumes=[dict(date=d.isoformat(),volume=v) for d,v in volumes.items()])
         encoded = json.dumps(inputs,sort_keys=True,separators=(',',':'))
+        phase = 'calculate'
         daily = model.build_history(checkins,volumes,target)[-1]
         result.update(daily)
         result.update(model_version=VERSION, source_model_version=model.MODEL_VERSION,
                       status='available' if daily['data_sufficient'] else 'insufficient_data',
                       input_sha256=hashlib.sha256(encoded.encode()).hexdigest(), inputs=inputs,
                       interpretation='Daily training action; not a movement-performance prediction. Target-day workouts excluded; source check-ins have date-only timing.')
-    except (sqlite3.Error, OSError, ValueError, TypeError):
+    except (sqlite3.Error, OSError, ValueError, TypeError) as error:
+        log_failure(phase,day,error)
         return unavailable(day,now)
     return result
 
