@@ -2178,7 +2178,7 @@
     if (key === "done") { input.blur(); closeNumberPad(); return; }
     if (key === "next") {
       const inputs = padInputs(), next = inputs[inputs.indexOf(input) + 1];
-      if (next) { next.inputMode = "none"; next.focus(); }
+      if (next) { next.inputMode = "none"; next.focus({ preventScroll: true }); }
       return;
     }
     input.focus({ preventScroll: true });
@@ -2207,9 +2207,14 @@
   let typingTimer = null;
   function liftIntoView(input) {
     if (document.activeElement !== input) return;
-    const vv = window.visualViewport, visible = (vv ? vv.height : window.innerHeight) - (padInput ? numberpad.offsetHeight : 0);
-    const top = input.getBoundingClientRect().top, want = visible * 0.3;   // a little way down, so the next sets show below it
-    if (Math.abs(top - want) > 40) window.scrollBy({ top: top - want, behavior: "smooth" });
+    const vv = window.visualViewport;
+    const viewportTop = vv ? vv.offsetTop : 0;
+    const visibleBottom = viewportTop + (vv ? vv.height : window.innerHeight) - (padInput ? numberpad.offsetHeight : 0);
+    const rect = input.getBoundingClientRect(), margin = 12;
+    const delta = rect.top < viewportTop + margin ? rect.top - viewportTop - margin
+      : rect.bottom > visibleBottom - margin ? rect.bottom - visibleBottom + margin : 0;
+    // Move only an obscured field, without an animation continuing into a set tap.
+    if (delta) window.scrollBy({ top: delta, behavior: "instant" });
   }
   document.addEventListener("focusin", (e) => {
     if (!e.target.matches || !e.target.matches("#exercises input")) return;

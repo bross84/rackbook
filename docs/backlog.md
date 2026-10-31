@@ -190,3 +190,5 @@ The gym is the garage on the home network, so none of this blocks use there.
 - Manual movement collapse (2026-10-28): completing all working sets on `/log` leaves the card open. Manual Collapse/Reopen, draft persistence, completion status and rest timers remain available. Checked with `node tests/test_log_collapse.cjs`.
 
 - Tablet set-tap stability (2026-10-28): outside taps dismiss the number pad after the target click, keeping rows steady through pointer-down and button focus so a set checkmark cannot shift under the finger. Keypad regression checks cover the event sequence.
+
+- Minimal field scrolling (2026-10-31): weight/reps and keyboard fields scroll only when obscured, by the minimum amount needed, without a smooth animation continuing into a set tap. Keypad Next suppresses native focus scrolling before the visibility check. Regression checks cover visible/obscured fields and delayed callbacks after blur; physical tablet verification remains.
