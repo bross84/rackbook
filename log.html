@@ -36,6 +36,7 @@
     .muted { color: var(--muted); font-size: 13px; }
     .stress { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; }
     .stress h3, .stress .stress-extra { display: none; }
+    .stress[aria-busy="true"] .stress-grid { opacity: .6; }
     .stress-grid { display: flex; align-items: baseline; gap: 8px; }
     .stress-grid span { color: var(--muted); margin-right: 8px; }
     .stress-grid strong { font-size: 16px; font-variant-numeric: tabular-nums; }
@@ -665,9 +666,11 @@
   }
 
   function fillStress(box, templateId) {
-    box.replaceChildren();
     const state = stressStates.get(templateId);
     box.setAttribute("aria-busy", String(!state || !!state.pending));
+    // Keep the rendered summary (and its height) while recalculating.
+    if (state && state.pending && state.result && box.querySelector(".stress-grid")) return;
+    box.replaceChildren();
     box.append(el("h3", null, "Movement stress"));
     if (state && state.error) {
       box.append(el("p", "muted", "Stress unavailable: " + state.error));
@@ -694,7 +697,7 @@
     const w = d.window;
     box.append(el("p", "stress-window", w.median == null ? "Session window: building history" :
       "Session window " + fmt(w.lower) + "–" + fmt(w.upper) + (status === "no_sets" ? "" : " · " + labels[status]) + (w.provisional ? " · Provisional" : "")));
-    if (preview.sets > d.session.sets) box.append(el("p", "muted", "Preview · " + d.session.sets + "/" + preview.sets + " sets checked"));
+    box.append(el("p", "muted", "Preview · " + d.session.sets + "/" + preview.sets + " sets checked"));
     if (w.median == null && d.status === "no_sets") box.append(el("p", "muted stress-extra", labels[d.status]));
     box.append(el("p", "muted stress-extra", w.sessions + " prior sessions / " + w.days + " days" + (w.provisional ? " · Provisional" : "") +
       (d.days_since_last == null ? "" : " · Last trained " + d.days_since_last + "d ago")));

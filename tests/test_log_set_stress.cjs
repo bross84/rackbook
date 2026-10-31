@@ -53,3 +53,31 @@ context.paintSetStress('bench');
 assert.equal(cells.get(checked).textContent,'—');
 assert.equal(totals[0].value.textContent,'—');
 console.log('Stress preview payloads, duplicate-movement row alignment, totals, pending/error states and accessible bands passed.');
+
+// Pending refreshes retain the rendered summary instead of shrinking the card.
+function element(tag, cls, text) {
+  return {tag, cls, textContent:text, children:[], dataset:{}, attrs:{},
+    append(...children){this.children.push(...children);},
+    replaceChildren(){this.children=[];}, setAttribute(k,v){this.attrs[k]=v;},
+    querySelector(selector){return this.children.find(child => '.'+child.cls === selector);}};
+}
+const metric = {total:1,sets:1,estimated_sets:0,skipped_sets:0,peripheral:0,central:0};
+const summaryState = {pending:false,result:{session:{...metric},preview:{...metric,sets:2},
+  rolling_7:metric,rolling_28:metric,status:'usual',window:{median:1,lower:.8,upper:1.2,sessions:6,days:56}}};
+const summaryContext = vm.createContext({el:element,stressStates:new Map([['bench',summaryState]]),
+  stressComparison:()=> 'Within usual range'});
+vm.runInContext(html.slice(html.indexOf('  function fillStress('),html.indexOf('  function say(')),summaryContext);
+const box=element('div','stress');
+summaryContext.fillStress(box,'bench');
+const rendered=box.children;
+summaryState.pending=true;
+summaryContext.fillStress(box,'bench');
+assert.equal(box.children,rendered,'Pending refresh must retain the summary DOM and height');
+assert.equal(box.attrs['aria-busy'],'true');
+summaryState.pending=false;
+summaryState.result.session.sets=2;
+summaryContext.fillStress(box,'bench');
+assert.equal(box.attrs['aria-busy'],'false');
+assert.equal(box.children.length,rendered.length,'Checking the final set must not remove the preview line');
+assert.ok(box.children.some(child=>child.textContent?.endsWith('2/2 sets checked')));
+console.log('Stress summary remains in place during refresh and final-set completion.');

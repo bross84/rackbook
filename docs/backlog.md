@@ -192,3 +192,5 @@ The gym is the garage on the home network, so none of this blocks use there.
 - Tablet set-tap stability (2026-10-28): outside taps dismiss the number pad after the target click, keeping rows steady through pointer-down and button focus so a set checkmark cannot shift under the finger. Keypad regression checks cover the event sequence.
 
 - Minimal field scrolling (2026-10-31): weight/reps and keyboard fields scroll only when obscured, by the minimum amount needed, without a smooth animation continuing into a set tap. Keypad Next suppresses native focus scrolling before the visibility check. Regression checks cover visible/obscured fields and delayed callbacks after blur; physical tablet verification remains.
+
+- Stable stress refresh layout (2026-10-31): retain the rendered session summary while recalculating, mark it busy with dimmed values, and keep the preview count line after the final set. RPE edits and set completion no longer replace the summary with a shorter loading message. Covered by the stress UI regression checks.
